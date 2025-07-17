@@ -25,6 +25,8 @@ services:
       - DEFAULT_LLM_PROVIDER=openai
       # Enable encryption (will auto-generate key if not provided)
       - ENABLE_ENCRYPTION=true
+      # Auto-generate encryption key for Docker containers
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-}
       # Data paths
       - DATA_DIR=/app/data
       - DOCUMENTS_PATH=/app/data/documents

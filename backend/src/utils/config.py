@@ -126,7 +126,7 @@ def ensure_encryption_setup(settings: Settings) -> Optional[str]:
     if not settings.enable_encryption:
         return None
 
-    # Priority 1: Check if we already have a valid key in settings
+    # Priority 1: Check if we already have a valid key in settings (environment variable)
     if (
         settings.encryption_key
         and settings.encryption_key != "your_encryption_key_here"
@@ -134,36 +134,47 @@ def ensure_encryption_setup(settings: Settings) -> Optional[str]:
         return settings.encryption_key
 
     # Priority 2: Check for existing key file (for Docker compatibility)
+    # Wrap in try-except to handle permission errors in Docker containers
     key_file = settings.data_dir / ".encryption_key"
-    if key_file.exists():
-        try:
-            key = key_file.read_text().strip()
-            if key and len(key) > 0:
-                print("🔐 Job Application Helper - Security Setup")
-                print("   ✅ Using existing encryption key from data directory")
-                return key
-        except Exception as e:
-            print(f"⚠️  Warning: Failed to read existing encryption key: {e}")
+    try:
+        if key_file.exists():
+            try:
+                key = key_file.read_text().strip()
+                if key and len(key) > 0:
+                    print("🔐 Job Application Helper - Security Setup")
+                    print("   ✅ Using existing encryption key from data directory")
+                    return key
+            except Exception as e:
+                print(f"⚠️  Warning: Failed to read existing encryption key: {e}")
+    except (PermissionError, OSError) as e:
+        # Docker containers may not have permission to access mounted volumes
+        # This is expected in some Docker setups, so we'll continue to generate a new key
+        print(f"⚠️  Warning: Cannot access encryption key file (likely Docker permissions): {e}")
+        print("   Continuing with key generation...")
 
-    # Priority 3: Generate new key only if no existing key found
+    # Priority 3: Generate new key for this session
     print("🔐 Job Application Helper - Security Setup")
     print("   ⚠️  No existing encryption key found - generating new key")
-    print("   ⚠️  WARNING: This will make existing encrypted data unrecoverable!")
     
     key = Fernet.generate_key().decode()
+    
+    # Try to save to .env file (works in development, may fail in Docker)
     success = update_env_file("ENCRYPTION_KEY", key)
-
+    
     if success:
         print("   ✅ Encryption enabled for data protection")
         print("   🔑 Generated new encryption key")
         print("   📁 Key saved to .env file")
         print("   💡 Tip: Back up your .env file to preserve access to your data")
         print("   ⚙️  To disable encryption, set ENABLE_ENCRYPTION=false in .env")
-        return key
     else:
-        print("   ⚠️  Warning: Could not save encryption key to .env file")
-        print("   Encryption will work for this session only")
-        return key
+        print("   ✅ Encryption enabled for data protection")
+        print("   🔑 Generated new encryption key for this session")
+        print("   ⚠️  Key not persisted - will be regenerated on restart")
+        print("   💡 For Docker: Set ENCRYPTION_KEY environment variable to persist key")
+        print("   ⚙️  To disable encryption, set ENABLE_ENCRYPTION=false")
+    
+    return key
 
 
 def update_env_file(key: str, value: str) -> bool:

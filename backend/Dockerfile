@@ -40,6 +40,17 @@ RUN mkdir -p data/{documents,cache} && \
     chown -R appuser:appuser /app && \
     chown -R appuser:appuser /home/appuser/.cache
 
+# Create a script to fix data directory permissions at runtime
+RUN echo '#!/bin/bash' > /app/fix-permissions.sh && \
+    echo 'if [ -d "/app/data" ]; then' >> /app/fix-permissions.sh && \
+    echo '  echo "Fixing data directory permissions..."' >> /app/fix-permissions.sh && \
+    echo '  find /app/data -type d -exec chmod 755 {} + 2>/dev/null || true' >> /app/fix-permissions.sh && \
+    echo '  find /app/data -type f -exec chmod 644 {} + 2>/dev/null || true' >> /app/fix-permissions.sh && \
+    echo '  echo "Data directory permissions fixed."' >> /app/fix-permissions.sh && \
+    echo 'fi' >> /app/fix-permissions.sh && \
+    chmod +x /app/fix-permissions.sh && \
+    chown appuser:appuser /app/fix-permissions.sh
+
 # Switch to non-root user
 USER appuser
 
@@ -51,4 +62,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health/ || exit 1
 
 # Start the application
-CMD ["python", "start_api.py"] 
+CMD ["/bin/bash", "-c", "/app/fix-permissions.sh && python start_api.py"] 
