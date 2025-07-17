@@ -1,0 +1,76 @@
+# Job Application Helper - Docker Compose Configuration
+# Multi-container setup for backend and frontend services
+
+services:
+  backend:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: job-helper-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount data directory for persistence
+      - ./data:/app/data
+      # Mount sentence-transformers cache for model persistence
+      - sentence_transformers_cache:/home/appuser/.cache/torch/sentence_transformers
+    environment:
+      - PYTHONPATH=/app
+      - ENVIRONMENT=production
+      - HOST=0.0.0.0
+      - PORT=8000
+      # Set sentence-transformers cache directory
+      - TRANSFORMERS_CACHE=/home/appuser/.cache/torch/sentence_transformers
+      # Default LLM provider
+      - DEFAULT_LLM_PROVIDER=openai
+      # Enable encryption (will auto-generate key if not provided)
+      - ENABLE_ENCRYPTION=true
+      # Data paths
+      - DATA_DIR=/app/data
+      - DOCUMENTS_PATH=/app/data/documents
+      - CACHE_PATH=/app/data/cache
+    networks:
+      - job-helper-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: job-helper-frontend
+    ports:
+      - "8080:8080"
+    environment:
+      - NODE_ENV=production
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - job-helper-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  job-helper-network:
+    driver: bridge
+    name: job-helper-network
+
+volumes:
+  job-helper-data:
+    driver: local
+    name: job-helper-data
+  sentence_transformers_cache:
+    driver: local
+    name: sentence-transformers-cache 

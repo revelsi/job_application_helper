@@ -1,0 +1,237 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Production builds
+/build
+/dist
+/.next/
+/out/
+
+# Environment variables - CRITICAL FOR SECURITY
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
+.env.*
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+logs
+*.log
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+
+# Dependency directories
+jspm_packages/
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.tox/
+.ruff_cache/
+
+# Java
+*.class
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+*.rar
+target/
+
+# Database
+*.sqlite
+*.sqlite3
+*.db
+
+# Temporary files
+tmp/
+temp/
+
+# Launcher PID files
+backend.pid
+frontend.pid
+
+# Cache
+.cache/
+.parcel-cache/
+
+# Job Application Helper Specific
+# =============================================================================
+
+# Development Documentation (internal)
+docs/phases/
+evaluation_results/
+
+# Frontend Build Artifacts
+frontend/build/
+frontend/dist/
+frontend/.next/
+frontend/out/
+
+# Backend Python Cache (in backend directory)
+backend/__pycache__/
+backend/*.pyc
+backend/.pytest_cache/
+backend/.mypy_cache/
+backend/.coverage
+backend/htmlcov/
+backend/.tox/
+backend/.ruff_cache/
+
+# Sensitive Data - NEVER COMMIT
+*.key
+.encryption_key
+*encryption_key*
+*.pem
+*.p12
+*.pfx
+secrets/
+credentials/
+data/credentials.enc
+backend/data/credentials.enc
+**/credentials.enc
+
+# User Data - Local Only
+data/documents/
+data/cache/
+data/company_cache/
+data/vector_db/
+data/uploads/
+data/memory.db
+data/chat_memory.db
+user_data/
+documents/
+uploads/
+
+# Model Files & Large Data
+*.model
+*.bin
+*.h5
+*.pkl
+*.pickle
+models/
+embeddings/
+checkpoints/
+
+# API Keys & Tokens (additional patterns)
+*api_key*
+*token*
+*secret*
+*password*
+auth.json
+config.json
+
+# LLM Provider Specific
+.mistral/
+.openai/
+prompt_cache/
+llm_cache/
+
+# Gradio Interface Files
+gradio_cached_examples/
+flagged/
+gradio_temp/
+
+# Logs & Debug Files
+*.log
+logs/
+debug/
+.logs/
+
+# Temporary Processing Files
+temp/
+tmp/
+processing/
+*.tmp
+*.temp
+
+# Vector Database Files
+chroma/
+chromadb/
+*.db
+*.sqlite
+*.sqlite3
+
+# Memory Management Files
+memory/
+conversations/
+sessions/
+
+# Backup Files
+*.bak
+*.backup
+*~
+
+# OS Specific
+.DS_Store*
+Thumbs.db
+desktop.ini
+
+# Misc
+*.tsbuildinfo
+.eslintcache
+
+# Security reports (keep local only - never commit detailed scan results)
+security_report.json
+bandit_results.json
+*.security.json
+security_audit_*.json 

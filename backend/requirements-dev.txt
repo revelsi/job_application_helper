@@ -1,0 +1,55 @@
+# Development Dependencies
+
+# Testing
+pytest>=8.4.0,<9.0.0
+pytest-asyncio>=1.0.0,<2.0.0
+pytest-cov>=6.2.0,<7.0.0
+pytest-mock>=3.14.0,<4.0.0
+
+# Code Quality & Linting
+black>=25.1.0,<26.0.0
+flake8>=7.3.0,<8.0.0
+isort>=6.0.0,<7.0.0
+mypy>=1.16.0,<2.0.0
+ruff>=0.12.0,<1.0.0
+
+# Security Scanning & Audit Tools
+# Note: safety temporarily removed due to pydantic version conflict
+# safety>=3.5.0,<4.0.0
+# safety-schemas>=0.0.14,<1.0.0
+bandit>=1.8.0,<2.0.0
+pip-audit>=2.9.0,<3.0.0
+
+# Pre-commit Hooks
+pre-commit>=4.2.0,<5.0.0
+
+# Documentation
+sphinx>=8.2.0,<9.0.0
+mkdocs>=1.6.0,<2.0.0
+mkdocs-get-deps>=0.2.0,<1.0.0
+
+# Development Tools
+jupyter>=1.1.0,<2.0.0
+ipykernel>=6.29.0,<7.0.0
+notebook>=7.4.0,<8.0.0
+jupyterlab>=4.4.0,<5.0.0
+fastapi
+uvicorn[standard]
+
+# Build & Package Management
+build>=1.2.0,<2.0.0
+setuptools>=80.9.0,<81.0.0
+wheel>=0.44.0,<1.0.0
+
+# Evaluation Framework (Development Only)
+ragas>=0.2.15,<1.0.0
+langchain>=0.3.26,<1.0.0
+langchain-community>=0.3.27,<1.0.0
+langchain-core>=0.3.68,<1.0.0
+langchain-openai>=0.3.27,<1.0.0
+langchain-text-splitters>=0.3.8,<1.0.0
+
+# Additional Development Utilities
+coverage>=7.9.0,<8.0.0
+tox>=4.0.0,<5.0.0
+twine>=5.0.0,<6.0.0 
