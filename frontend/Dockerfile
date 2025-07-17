@@ -5,7 +5,7 @@ FROM node:18-alpine
 
 # Set environment variables
 ENV NODE_ENV=development
-ENV VITE_API_URL=http://localhost:8000
+ENV VITE_API_BASE_URL=http://localhost:8000
 
 # Install system dependencies
 RUN apk add --no-cache \
@@ -45,5 +45,15 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8080/ || exit 1
 
-# Start the development server
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "8080"] 
+# Build the app for production
+RUN npm run build
+
+# Switch to root to install serve globally
+USER root
+RUN npm install -g serve
+
+# Switch back to appuser
+USER appuser
+
+# Start the production server
+CMD ["serve", "-s", "dist", "-l", "8080"] 
