@@ -158,7 +158,7 @@ class SimpleChatController:
                 prompt=prompt,
                 content_type=content_type,
                 context=context,
-                max_tokens=getattr(self.settings, "chat_max_tokens", 2000),
+                max_tokens=getattr(self.settings, "chat_max_tokens", 4000),  # Updated default
                 temperature=0.7,
             )
             
@@ -274,7 +274,7 @@ class SimpleChatController:
                 prompt=prompt,
                 content_type=content_type,
                 context=context,
-                max_tokens=getattr(self.settings, "chat_max_tokens", 2000),
+                max_tokens=getattr(self.settings, "chat_max_tokens", 4000),  # Updated default
                 temperature=0.7,
             )
             
@@ -370,10 +370,13 @@ class SimpleChatController:
                 "document_counts": {},
             }
         
-        # Get context from document service
+        # Get context from document service with larger limits
         context = self.document_service.get_relevant_context(
             query=message,
-            max_context_length=getattr(self.settings, "max_context_length", 8000),
+            max_context_length=getattr(self.settings, "max_context_length", 100000),
+            max_candidate_doc_length=getattr(self.settings, "max_candidate_doc_length", 50000),
+            max_job_doc_length=getattr(self.settings, "max_job_doc_length", 30000), 
+            max_company_doc_length=getattr(self.settings, "max_company_doc_length", 20000),
         )
         
         return context

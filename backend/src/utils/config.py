@@ -60,10 +60,15 @@ class Settings(BaseSettings):
     max_upload_size_mb: int = Field(default=10, env="MAX_UPLOAD_SIZE_MB")
 
     # Document Processing Configuration
-    max_context_length: int = Field(default=24000, env="MAX_CONTEXT_LENGTH")
+    max_context_length: int = Field(default=100000, env="MAX_CONTEXT_LENGTH")  # ~100K chars ≈ 25K tokens for GPT-4.1-mini
+    
+    # Per-document context limits (significantly increased for modern LLMs)
+    max_candidate_doc_length: int = Field(default=50000, env="MAX_CANDIDATE_DOC_LENGTH")  # Allow full CV content
+    max_job_doc_length: int = Field(default=30000, env="MAX_JOB_DOC_LENGTH")  # Allow detailed job descriptions
+    max_company_doc_length: int = Field(default=20000, env="MAX_COMPANY_DOC_LENGTH")  # Allow comprehensive company info
 
     # Chat Generation Configuration
-    chat_max_tokens: int = Field(default=2000, env="CHAT_MAX_TOKENS")
+    chat_max_tokens: int = Field(default=4000, env="CHAT_MAX_TOKENS")  # Increased for longer, more detailed responses
     conversation_context_limit: int = Field(default=3, env="CONVERSATION_CONTEXT_LIMIT")
 
     # Multi-Query Configuration

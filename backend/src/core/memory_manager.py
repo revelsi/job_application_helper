@@ -445,14 +445,14 @@ class MessageManager:
 class ContextWindowManager:
     """Manages context window optimization for LLM interactions."""
 
-    def __init__(self, max_tokens: int = 8000):
+    def __init__(self, max_tokens: int = 120000):  # Updated for GPT-4.1-mini 128K context
         """Initialize context window manager."""
         self.max_tokens = max_tokens
-        self.system_message_tokens = 200  # Reserved for system messages
-        self.response_buffer_tokens = 800  # Reserved for response generation
+        self.system_message_tokens = 500  # Increased reserved space for system messages
+        self.response_buffer_tokens = 4000  # Increased buffer to match new chat_max_tokens
         # Ensure we have at least some tokens available for conversation history
         self.available_tokens = max(
-            500, max_tokens - self.system_message_tokens - self.response_buffer_tokens
+            1000, max_tokens - self.system_message_tokens - self.response_buffer_tokens
         )
 
     def optimize_context(
@@ -537,7 +537,7 @@ class ContextWindowManager:
 class MemoryManager:
     """Main memory management system for chat functionality."""
 
-    def __init__(self, db_path: Optional[Path] = None, max_context_tokens: int = 8000):
+    def __init__(self, db_path: Optional[Path] = None, max_context_tokens: int = 120000):  # Updated for GPT-4.1-mini
         """Initialize memory manager."""
         self.db = MemoryDatabase(db_path)
         self.session_manager = SessionManager(self.db)

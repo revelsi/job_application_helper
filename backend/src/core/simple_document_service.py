@@ -313,14 +313,20 @@ class SimpleDocumentService:
     def get_relevant_context(
         self,
         query: str,
-        max_context_length: int = 8000,
+        max_context_length: int = 100000,      # Updated for GPT-4.1-mini 128K context
+        max_candidate_doc_length: int = 50000, # Allow full CV content
+        max_job_doc_length: int = 30000,       # Allow detailed job descriptions  
+        max_company_doc_length: int = 20000,   # Allow comprehensive company info
     ) -> Dict[str, Any]:
         """
         Get relevant document context for LLM prompting.
         
         Args:
             query: User query
-            max_context_length: Maximum context length in characters
+            max_context_length: Maximum total context length in characters
+            max_candidate_doc_length: Maximum length per candidate document
+            max_job_doc_length: Maximum length per job document
+            max_company_doc_length: Maximum length per company document
             
         Returns:
             Dictionary with context information
@@ -341,8 +347,10 @@ class SimpleDocumentService:
                 if current_length + len(doc.content) > max_context_length:
                     break
                 context_sections.append(f"**{doc.metadata.original_filename}:**")
-                context_sections.append(doc.content[:2000])  # Limit each document
-                current_length += len(doc.content[:2000])
+                # Use configurable limit instead of hard-coded 2000
+                doc_content = doc.content[:max_candidate_doc_length]
+                context_sections.append(doc_content)
+                current_length += len(doc_content)
             context_sections.append("")
         
         # Add job information
@@ -352,8 +360,10 @@ class SimpleDocumentService:
                 if current_length + len(doc.content) > max_context_length:
                     break
                 context_sections.append(f"**{doc.metadata.original_filename}:**")
-                context_sections.append(doc.content[:2000])  # Limit each document
-                current_length += len(doc.content[:2000])
+                # Use configurable limit instead of hard-coded 2000
+                doc_content = doc.content[:max_job_doc_length]
+                context_sections.append(doc_content)
+                current_length += len(doc_content)
             context_sections.append("")
         
         # Add company information
@@ -363,8 +373,10 @@ class SimpleDocumentService:
                 if current_length + len(doc.content) > max_context_length:
                     break
                 context_sections.append(f"**{doc.metadata.original_filename}:**")
-                context_sections.append(doc.content[:1500])  # Limit each document
-                current_length += len(doc.content[:1500])
+                # Use configurable limit instead of hard-coded 1500
+                doc_content = doc.content[:max_company_doc_length]
+                context_sections.append(doc_content)
+                current_length += len(doc_content)
             context_sections.append("")
         
         context_text = "\n".join(context_sections)
