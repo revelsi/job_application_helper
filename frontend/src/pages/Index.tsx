@@ -29,6 +29,18 @@ interface ClearResponse {
   message?: string;
 }
 
+interface DocumentUploadResponse {
+  document_id: string;
+  success: boolean;
+  message: string;
+  file_name?: string;
+  error?: string;
+  metadata?: {
+    tags?: string[];
+    [key: string]: any;
+  };
+}
+
 const Index = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isInitializing, setIsInitializing] = useState(false);
@@ -103,8 +115,36 @@ const Index = () => {
         throw new Error(response.error || 'Failed to upload document');
       }
 
-      // Refresh the document list to show the newly uploaded document
-      await fetchExistingDocuments();
+      // Immediately add the document to the UI using the upload response
+      const uploadData = response.data as DocumentUploadResponse;
+      if (uploadData && uploadData.document_id) {
+        const newDocument: Document = {
+          id: uploadData.document_id,
+          filename: uploadData.file_name || file.name,
+          type: category === 'personal' ? 'cv' : 'job_description', // Default types based on category
+          size: file.size,
+          upload_date: new Date().toISOString(),
+          category: category,
+          tags: uploadData.metadata?.tags || []
+        };
+        
+        // Add to existing documents immediately
+        setExistingDocuments(prev => [newDocument, ...prev]);
+        
+        // Update session data counts
+        setSessionData(prev => ({
+          ...prev,
+          personalDocsCount: category === 'personal' ? prev.personalDocsCount + 1 : prev.personalDocsCount,
+          jobSpecificDocsCount: category === 'job-specific' ? prev.jobSpecificDocsCount + 1 : prev.jobSpecificDocsCount,
+          lastActivity: new Date()
+        }));
+      }
+
+      // Also refresh from backend after a longer delay to ensure consistency
+      // This serves as a backup and handles any edge cases
+      setTimeout(async () => {
+        await fetchExistingDocuments();
+      }, 2000);
 
     } catch (error) {
       console.error('Error uploading document:', error);
