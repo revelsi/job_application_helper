@@ -69,6 +69,7 @@ npm run dev
 - **Port conflicts:** Check ports 8000/8080 are free
 - **Python/Node missing:** Install required versions
 - **API keys:** Optional for testing, add via web interface
+- **First query delay (Mistral only):** Initial requests may take ~25 seconds for model warmup
 
 **Logs:** `docker compose logs` or `./start-containers.sh logs`
 
