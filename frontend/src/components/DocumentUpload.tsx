@@ -59,19 +59,7 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({
   const handleFileUpload = useCallback(async (file: File, category: 'personal' | 'job-specific') => {
     try {
       await onUpload(file, category);
-      
-      // Simulate adding document to local state
-      const newDocument: Document = {
-        id: Date.now().toString(),
-        filename: file.name,
-        type: file.type,
-        size: file.size,
-        upload_date: new Date().toISOString(),
-        category,
-        tags: []
-      };
-      
-      setDocuments(prev => [...prev, newDocument]);
+      // Parent component will handle refreshing the document list
     } catch (error) {
       console.error('Upload failed:', error);
     }

@@ -21,8 +21,6 @@ services:
       - PORT=8000
       # Set sentence-transformers cache directory
       - TRANSFORMERS_CACHE=/home/appuser/.cache/torch/sentence_transformers
-      # Default LLM provider
-      - DEFAULT_LLM_PROVIDER=openai
       # Enable encryption (will auto-generate key if not provided)
       - ENABLE_ENCRYPTION=true
       # Auto-generate encryption key for Docker containers

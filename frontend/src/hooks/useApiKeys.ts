@@ -11,6 +11,7 @@ interface ProviderStatus {
 interface ApiKeyStatus {
   providers: {
     openai: ProviderStatus;
+    mistral: ProviderStatus;
   };
   has_any_configured: boolean;
   has_env_configured: boolean;
@@ -110,23 +111,7 @@ export const useApiKeys = () => {
     }
   };
 
-  const testApiKey = async (provider: string) => {
-    try {
-      setError(null);
-      
-      const response = await apiClient.post(`/api/keys/test/${provider}`);
 
-      if (!response.success) {
-        throw new Error(response.error || 'Failed to test API key');
-      }
-
-      return response.data;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
-      console.error('Error testing API key:', err);
-      throw err;
-    }
-  };
 
   useEffect(() => {
     fetchApiKeyStatus();
@@ -139,7 +124,6 @@ export const useApiKeys = () => {
     error,
     setApiKey,
     removeApiKey,
-    testApiKey,
     refreshStatus: fetchApiKeyStatus,
   };
 }; 

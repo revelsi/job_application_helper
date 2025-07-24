@@ -72,16 +72,10 @@ const Index = () => {
   const hasApiKeys = apiKeyStatus?.has_any_configured || false;
   const hasEnvConfigured = apiKeyStatus?.has_env_configured || false;
   
-  // Check if OpenAI (required provider) is configured
-  const hasRequiredApiKeys = apiKeyStatus?.providers?.openai?.configured || false;
+  // Check if any provider (OpenAI or Mistral) is configured
+  const hasRequiredApiKeys = (apiKeyStatus?.providers?.openai?.configured || apiKeyStatus?.providers?.mistral?.configured) || false;
   
-  // Debug logging
-  console.log('API Key Status Debug:', {
-    apiKeyStatus,
-    hasRequiredApiKeys,
-    hasApiKeys,
-    providers: apiKeyStatus?.providers
-  });
+
 
   // Fetch existing documents when API keys are available
   useEffect(() => {
@@ -95,28 +89,9 @@ const Index = () => {
   const shouldShowApiKeySetup = !hasRequiredApiKeys;
 
   const handleSendMessage = async (message: string): Promise<void> => {
-    setIsLoading(true);
-    try {
-      // Call the backend API using secure client
-      const response = await apiClient.post('/chat/complete', { message });
-
-      if (!response.success) {
-        throw new Error(response.error || 'Failed to send message');
-      }
-
-      // Update session data
-      setSessionData(prev => ({
-        ...prev,
-        chatMessagesCount: prev.chatMessagesCount + 1,
-        lastActivity: new Date()
-      }));
-
-    } catch (error) {
-      console.error('Error sending message:', error);
-      throw error;
-    } finally {
-      setIsLoading(false);
-    }
+    // ChatInterface handles its own message sending with streaming
+    // This is just a stub to satisfy the prop interface
+    return Promise.resolve();
   };
 
   const handleDocumentUpload = async (file: File, category: 'personal' | 'job-specific') => {
@@ -370,8 +345,8 @@ const Index = () => {
                       </h3>
                       <p className="text-muted-foreground">
                         {hasEnvConfigured 
-                          ? 'Both OpenAI and environment variables are configured. You have access to all features.'
-                          : 'OpenAI is configured and ready. You can use all AI features. Environment variables are optional for enhanced web search.'
+                          ? 'AI provider and environment variables are configured. You have access to all features.'
+                          : 'AI provider is configured and ready. You can use all AI features. Environment variables are optional for enhanced web search.'
                         }
                       </p>
                       <div className={`mt-4 p-4 rounded-lg border ${
@@ -425,11 +400,11 @@ const Index = () => {
                     <div>
                       <h3 className="text-xl font-bold text-gradient mb-2">API Keys Required</h3>
                       <p className="text-muted-foreground">
-                        Please configure your OpenAI API key first before uploading documents.
+                        Please configure at least one AI provider (OpenAI or Mistral) before uploading documents.
                       </p>
                       <div className="mt-4 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
                         <p className="text-sm text-yellow-800">
-                          <strong>Next Step:</strong> Go to the API Keys tab to configure your OpenAI API key
+                          <strong>Next Step:</strong> Go to the API Keys tab to configure an AI provider
                         </p>
                       </div>
                     </div>
@@ -467,11 +442,11 @@ const Index = () => {
                     <div>
                       <h3 className="text-xl font-bold text-gradient mb-2">API Keys Required</h3>
                       <p className="text-muted-foreground">
-                        Please configure your OpenAI API key first before chatting with the AI assistant.
+                        Please configure at least one AI provider (OpenAI or Mistral) before chatting with the AI assistant.
                       </p>
                       <div className="mt-4 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
                         <p className="text-sm text-yellow-800">
-                          <strong>Next Step:</strong> Go to the API Keys tab to configure your OpenAI API key
+                          <strong>Next Step:</strong> Go to the API Keys tab to configure an AI provider
                         </p>
                       </div>
                     </div>

@@ -34,7 +34,8 @@ export const ApiKeysSetup: React.FC<ApiKeysSetupProps> = ({ isOpen, onClose, onS
   const prevConfigRef = useRef<boolean>(false);
 
   const providers = [
-    { key: 'openai', name: 'OpenAI', icon: <Key className="h-4 w-4" />, required: true },
+    { key: 'openai', name: 'OpenAI', icon: <Key className="h-4 w-4" />, required: false },
+    { key: 'mistral', name: 'Mistral', icon: <Key className="h-4 w-4" />, required: false },
   ];
 
   const apiKeys: { [key: string]: string } = {
@@ -47,9 +48,9 @@ export const ApiKeysSetup: React.FC<ApiKeysSetupProps> = ({ isOpen, onClose, onS
     return status?.configured || false;
   };
 
-  // Check if OpenAI (required provider) is configured
-  const isRequiredProviderConfigured = () => {
-    return isProviderConfigured('openai');
+  // Check if any provider is configured
+  const isAnyProviderConfigured = () => {
+    return isProviderConfigured('openai') || isProviderConfigured('mistral');
   };
 
   // Use the hook's status directly instead of local state
@@ -72,7 +73,7 @@ export const ApiKeysSetup: React.FC<ApiKeysSetupProps> = ({ isOpen, onClose, onS
   // Monitor when required provider becomes configured in embedded mode
   useEffect(() => {
     if (embedded) {
-      const isCurrentlyConfigured = isRequiredProviderConfigured();
+      const isCurrentlyConfigured = isAnyProviderConfigured();
       const wasConfigured = prevConfigRef.current;
       
       // Only trigger if we just became configured (transition from false to true)
@@ -124,6 +125,24 @@ export const ApiKeysSetup: React.FC<ApiKeysSetupProps> = ({ isOpen, onClose, onS
   const handleSaveKey = async () => {
     if (!apiKeyInput.trim()) {
       setMessage({ type: 'error', text: 'API key cannot be empty.' });
+      return;
+    }
+
+    // Validate API key format
+    if (selectedProvider === 'openai' && !apiKeyInput.startsWith('sk-')) {
+      setMessage({ type: 'error', text: 'OpenAI API key must start with "sk-"' });
+      return;
+    }
+
+    // Check if another provider is already configured (enforce single provider)
+    const otherProvider = selectedProvider === 'openai' ? 'mistral' : 'openai';
+    const otherProviderConfigured = isProviderConfigured(otherProvider);
+    
+    if (otherProviderConfigured) {
+      setMessage({ 
+        type: 'error', 
+        text: `Please remove the ${otherProvider === 'openai' ? 'OpenAI' : 'Mistral'} key first. Only one provider can be active at a time.` 
+      });
       return;
     }
 
@@ -192,6 +211,8 @@ export const ApiKeysSetup: React.FC<ApiKeysSetupProps> = ({ isOpen, onClose, onS
     switch (provider) {
       case 'openai':
         return 'GPT-4.1-mini - AI language model for intelligent responses';
+      case 'mistral':
+        return 'Magistral Small - Reasoning model with step-by-step thinking';
       default:
         return '';
     }
@@ -199,18 +220,21 @@ export const ApiKeysSetup: React.FC<ApiKeysSetupProps> = ({ isOpen, onClose, onS
 
   const getSystemStatusMessage = () => {
     const openaiConfigured = isProviderConfigured('openai');
+    const mistralConfigured = isProviderConfigured('mistral');
     
-    if (openaiConfigured) {
+    if (openaiConfigured || mistralConfigured) {
+      const activeProvider = openaiConfigured ? 'OpenAI' : 'Mistral';
+      
       return {
         type: 'complete' as const,
-        title: 'All Systems Ready',
-        description: 'OpenAI is configured. You have access to all features.'
+        title: 'AI Provider Ready',
+        description: `${activeProvider} is configured and active. You have access to AI features.`
       };
     } else {
       return {
         type: 'incomplete' as const,
         title: 'Setup Required',
-        description: 'OpenAI API key is required to use AI features.'
+        description: 'Configure one AI provider (OpenAI or Mistral) to use AI features.'
       };
     }
   };
@@ -350,83 +374,139 @@ export const ApiKeysSetup: React.FC<ApiKeysSetupProps> = ({ isOpen, onClose, onS
         })}
       </div>
 
-      {/* API Key Entry Sections */}
+      {/* API Key Entry Section */}
       <div className="space-y-6">
-        {/* OpenAI API Key Section */}
         <div className="space-y-4">
           <div className="flex items-center gap-2">
-            <h3 className="text-lg font-semibold">OpenAI API Key</h3>
-            <Badge variant="destructive" className="text-xs">Required</Badge>
+            <h3 className="text-lg font-semibold">Configure AI Provider</h3>
             <div className="flex-1 h-px bg-border" />
           </div>
+          
+          {/* Single Provider Warning */}
+          <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+            <div className="flex items-start gap-2">
+              <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm text-blue-800 dark:text-blue-200 font-medium">
+                  Single Provider Mode
+                </p>
+                <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                  Only one AI provider can be active at a time. Remove an existing key before adding a different provider.
+                </p>
+              </div>
+            </div>
+          </div>
 
-          {isProviderConfigured('openai') ? (
-            <div className="space-y-3">
-              {/* Removed: Configured status box for OpenAI API key */}
-              {canUpdateKey('openai') && (
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setSelectedProvider('openai');
-                    setApiKeyInput('');
-                    setShowApiKey(false);
-                  }}
-                  className="w-full"
-                >
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                  Update OpenAI Key
-                </Button>
+          <div className="space-y-4">
+            {/* Provider Selection */}
+            <div className="space-y-2">
+              <Label htmlFor="provider-select" className="text-sm font-medium">
+                Select Provider
+              </Label>
+              <Select 
+                value={selectedProvider} 
+                onValueChange={setSelectedProvider}
+                disabled={isAnyProviderConfigured()}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder={
+                    isAnyProviderConfigured() 
+                      ? "Remove existing provider to add a different one" 
+                      : "Choose an AI provider..."
+                  } />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="openai" disabled={isProviderConfigured('mistral')}>
+                    <div className="flex items-center gap-2">
+                      <Key className="h-4 w-4" />
+                      <div>
+                        <div className="font-medium">OpenAI</div>
+                        <div className="text-xs text-muted-foreground">GPT-4.1-mini</div>
+                      </div>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="mistral" disabled={isProviderConfigured('openai')}>
+                    <div className="flex items-center gap-2">
+                      <Key className="h-4 w-4" />
+                      <div>
+                        <div className="font-medium">Mistral</div>
+                        <div className="text-xs text-muted-foreground">Magistral Small (Reasoning)</div>
+                      </div>
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              {isAnyProviderConfigured() && (
+                <p className="text-xs text-muted-foreground">
+                  Remove the existing provider key to configure a different one.
+                </p>
               )}
             </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="relative">
-                <Input
-                  type={showApiKey ? "text" : "password"}
-                  placeholder="Enter your OpenAI API key (sk-...)"
-                  value={selectedProvider === 'openai' ? apiKeyInput : ''}
-                  onChange={(e) => {
-                    setSelectedProvider('openai');
-                    setApiKeyInput(e.target.value);
-                  }}
-                  className="pr-10"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowApiKey(!showApiKey)}
-                  className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 p-0"
-                >
-                  {showApiKey ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
-                </Button>
-              </div>
-              <div className="flex gap-3">
-                <Button
-                  onClick={handleSaveKey}
-                  disabled={!apiKeyInput.trim() || selectedProvider !== 'openai' || isSaving}
-                  className="flex-1"
-                >
-                  {isSaving && selectedProvider === 'openai' ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="mr-2 h-4 w-4" />
-                      Save Key
-                    </>
-                  )}
-                </Button>
-                {/* Removed Test Key button */}
-              </div>
-            </div>
-          )}
+
+            {/* API Key Input */}
+            {selectedProvider && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="api-key-input" className="text-sm font-medium">
+                    API Key
+                  </Label>
+                  <div className="relative">
+                    <Input
+                      id="api-key-input"
+                      type={showApiKey ? "text" : "password"}
+                      placeholder={
+                        selectedProvider === 'openai' 
+                          ? "Enter your OpenAI API key (sk-...)" 
+                          : "Enter your Mistral API key"
+                      }
+                      value={apiKeyInput}
+                      onChange={(e) => setApiKeyInput(e.target.value)}
+                      className="pr-10"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowApiKey(!showApiKey)}
+                      className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 p-0"
+                    >
+                      {showApiKey ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {selectedProvider === 'openai' 
+                      ? "Get your API key from platform.openai.com"
+                      : "Get your API key from console.mistral.ai"
+                    }
+                  </p>
+                </div>
+
+                <div className="flex gap-3">
+                  <Button
+                    onClick={handleSaveKey}
+                    disabled={!apiKeyInput.trim() || !selectedProvider || isSaving}
+                    className="flex-1"
+                  >
+                    {isSaving ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="mr-2 h-4 w-4" />
+                        Save {providers.find(p => p.key === selectedProvider)?.name} Key
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 

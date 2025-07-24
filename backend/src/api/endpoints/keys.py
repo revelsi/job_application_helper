@@ -37,7 +37,7 @@ router = APIRouter(prefix="/api/keys", tags=["api-keys"])
 class APIKeyRequest(BaseModel):
     """Request model for setting API keys."""
 
-    provider: str = Field(..., description="Provider name (openai)")
+    provider: str = Field(..., description="Provider name (openai, mistral)")
     api_key: str = Field(..., description="API key for the provider")
 
 
@@ -136,10 +136,10 @@ async def set_api_key(request: APIKeyRequest):
         key_manager = get_api_key_manager()
 
         # Validate provider
-        if request.provider not in ["openai"]:
+        if request.provider not in ["openai", "mistral"]:
             raise HTTPException(
                 status_code=400,
-                detail="Invalid provider. Supported: openai",
+                detail="Invalid provider. Supported: openai, mistral",
             )
 
         # Validate API key format
@@ -186,10 +186,10 @@ async def remove_api_key(provider: str):
         key_manager = get_api_key_manager()
 
         # Validate provider
-        if provider not in ["openai"]:
+        if provider not in ["openai", "mistral"]:
             raise HTTPException(
                 status_code=400,
-                detail="Invalid provider. Supported: openai",
+                detail="Invalid provider. Supported: openai, mistral",
             )
 
         # Remove the API key
@@ -229,10 +229,10 @@ async def test_api_key(provider: str):
         key_manager = get_api_key_manager()
 
         # Validate provider
-        if provider not in ["openai"]:
+        if provider not in ["openai", "mistral"]:
             raise HTTPException(
                 status_code=400,
-                detail="Invalid provider. Supported: openai",
+                detail="Invalid provider. Supported: openai, mistral",
             )
 
         # Get the API key
@@ -243,32 +243,37 @@ async def test_api_key(provider: str):
             )
 
         # Test the API key by creating a provider instance
+        from src.core.llm_providers.base import ProviderType
+        from src.core.llm_providers.factory import get_llm_provider
+
         if provider == "openai":
-            from src.core.llm_providers.base import ProviderType
-            from src.core.llm_providers.factory import get_llm_provider
-
             provider_type = ProviderType.OPENAI
-            llm_provider = get_llm_provider(provider_type, api_key)
+        elif provider == "mistral":
+            provider_type = ProviderType.MISTRAL
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported provider: {provider}")
 
-            # Test availability
-            if llm_provider.is_available():
-                logger.info(f"API key test successful for {provider}")
-                return APIKeyResponse(
-                    success=True,
-                    message=f"API key for {provider} is valid and working",
-                    provider=provider,
-                    configured=True,
-                )
-            else:
-                logger.warning(
-                    f"API key test failed for {provider} - provider not available"
-                )
-                return APIKeyResponse(
-                    success=False,
-                    message=f"API key for {provider} is not working",
-                    provider=provider,
-                    configured=False,
-                )
+        llm_provider = get_llm_provider(provider_type, api_key)
+
+        # Test availability
+        if llm_provider.is_available():
+            logger.info(f"API key test successful for {provider}")
+            return APIKeyResponse(
+                success=True,
+                message=f"API key for {provider} is valid and working",
+                provider=provider,
+                configured=True,
+            )
+        else:
+            logger.warning(
+                f"API key test failed for {provider} - provider not available"
+            )
+            return APIKeyResponse(
+                success=False,
+                message=f"API key for {provider} is not working",
+                provider=provider,
+                configured=False,
+            )
 
     except HTTPException:
         raise

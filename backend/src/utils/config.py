@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     # LLM Configuration
     openai_api_key: Optional[str] = Field(default=None, env="OPENAI_API_KEY")
     anthropic_api_key: Optional[str] = Field(default=None, env="ANTHROPIC_API_KEY")
-    default_llm_provider: str = Field(default="openai", env="DEFAULT_LLM_PROVIDER")
+    mistral_api_key: Optional[str] = Field(default=None, env="MISTRAL_API_KEY")
 
     # External APIs
     linkedin_api_key: Optional[str] = Field(default=None, env="LINKEDIN_API_KEY")

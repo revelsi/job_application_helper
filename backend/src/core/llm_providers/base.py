@@ -37,6 +37,7 @@ class ProviderType(Enum):
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
     OLLAMA = "ollama"
+    MISTRAL = "mistral"
     AUTO = "auto"  # Automatically select based on available API keys
 
 

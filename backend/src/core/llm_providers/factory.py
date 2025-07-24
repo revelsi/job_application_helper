@@ -26,6 +26,7 @@ from typing import Dict, List, Optional
 from src.core.credentials import get_credentials_manager
 from src.core.llm_providers.base import LLMProvider, ProviderType
 from src.core.llm_providers.openai_provider import OPENAI_AVAILABLE, OpenAIProvider
+from src.core.llm_providers.mistral_provider import MISTRAL_AVAILABLE, MistralProvider
 from src.utils.config import get_settings
 from src.utils.logging import get_logger
 
@@ -73,6 +74,8 @@ class APIKeyManager:
         env_key = None
         if provider == "openai":
             env_key = self.settings.openai_api_key
+        elif provider == "mistral":
+            env_key = getattr(self.settings, "mistral_api_key", None)
 
         if env_key and env_key.strip() and env_key != f"your_{provider}_api_key_here":
             return env_key.strip()
@@ -113,13 +116,16 @@ class APIKeyManager:
         """
         result = {}
 
-        for provider in ["openai"]:
+        for provider in ["openai", "mistral"]:
             has_env_key = False
             has_stored_key = False
 
             # Check environment variable
+            env_key = None
             if provider == "openai":
                 env_key = self.settings.openai_api_key
+            elif provider == "mistral":
+                env_key = getattr(self.settings, "mistral_api_key", None)
 
             if (
                 env_key
@@ -205,6 +211,17 @@ def get_available_providers() -> Dict[ProviderType, bool]:
     except Exception:
         providers[ProviderType.OPENAI] = False
 
+    # Check Mistral availability
+    try:
+        if MISTRAL_AVAILABLE:
+            mistral_key = key_manager.get_api_key("mistral")
+            mistral_provider = MistralProvider(api_key=mistral_key)
+            providers[ProviderType.MISTRAL] = mistral_provider.is_available()
+        else:
+            providers[ProviderType.MISTRAL] = False
+    except Exception:
+        providers[ProviderType.MISTRAL] = False
+
     return providers
 
 
@@ -242,6 +259,21 @@ def get_llm_provider(
             )
         return provider
 
+    elif provider_type == ProviderType.MISTRAL:
+        if not MISTRAL_AVAILABLE:
+            raise ImportError(
+                "Mistral provider requires the mistralai package. Install with: pip install mistralai"
+            )
+        final_key = key_manager.get_api_key("mistral", api_key)
+        provider = MistralProvider(api_key=final_key)
+        if not provider.is_available():
+            raise ValueError(
+                "Mistral provider is not available. Please configure your Mistral API key:\n"
+                "- Through the UI (recommended), or\n"
+                "- Set MISTRAL_API_KEY environment variable"
+            )
+        return provider
+
     else:
         raise ValueError(f"Unsupported provider type: {provider_type}")
 
@@ -269,51 +301,29 @@ def get_default_provider() -> LLMProvider:
     config_status = key_manager.list_configured_providers()
     logger.debug(f"📊 Provider configuration status: {config_status}")
 
-    # Try to get provider from configuration
-    default_provider_name = getattr(settings, "default_llm_provider", None)
-    if default_provider_name:
-        logger.info(f"🎯 Trying configured default provider: {default_provider_name}")
-        try:
-            provider_type = ProviderType(default_provider_name.lower())
-            provider = get_llm_provider(provider_type)
-            logger.info(
-                f"✅ Successfully initialized configured provider: {provider_type.value}"
-            )
-            return provider
-        except (ValueError, ImportError) as e:
-            logger.warning(
-                f"❌ Configured default provider '{default_provider_name}' not available: {e}"
-            )
-
-    # Fall back to first available provider
-    logger.info("🔄 Falling back to first available provider...")
+    # Check for available providers (environment variables or user-configured keys)
     available = get_available_providers()
     logger.debug(f"📋 Available providers: {available}")
+    
+    if not any(available.values()):
+        logger.warning("❌ No LLM providers are configured. Please configure API keys.")
+        raise ValueError(
+            "No LLM providers are available. Please configure API keys:\n"
+            "- Through the UI (recommended), or\n" 
+            "- Set environment variables (OPENAI_API_KEY, MISTRAL_API_KEY, etc.)"
+        )
 
-    # Prefer OpenAI (GPT-4.1)
-    for provider_type in [
-        ProviderType.OPENAI
-    ]:
-        logger.debug(f"🔍 Checking {provider_type.value} provider...")
-
+    # Use the first available provider (no preferences - user choice)
+    for provider_type in [ProviderType.OPENAI, ProviderType.MISTRAL]:
         if available.get(provider_type, False):
-            logger.info(
-                f"✅ {provider_type.value} is available, attempting to initialize..."
-            )
+            logger.info(f"🔍 Using available provider: {provider_type.value}")
             try:
                 provider = get_llm_provider(provider_type)
-                logger.info(
-                    f"🎉 Successfully initialized {provider_type.value} as default provider"
-                )
+                logger.info(f"✅ Successfully initialized {provider_type.value}")
                 return provider
             except Exception as e:
-                logger.error(f"❌ Failed to initialize {provider_type.value}: {e}")
-        else:
-            # Get more details about why it's not available
-            provider_config = config_status.get(provider_type.value.lower(), {})
-            logger.debug(
-                f"❌ {provider_type.value} not available - config: {provider_config}"
-            )
+                logger.warning(f"❌ Failed to initialize {provider_type.value}: {e}")
+                continue
 
     # No providers available
     logger.error("❌ No LLM providers are available")
@@ -325,11 +335,14 @@ def get_default_provider() -> LLMProvider:
     for provider, status in config_status.items():
         if provider == "openai":
             error_msg += f"• OpenAI: {'✓ Configured' if status['configured'] else '✗ Not configured'}\n"
+        elif provider == "mistral":
+            error_msg += f"• Mistral: {'✓ Configured' if status['configured'] else '✗ Not configured'}\n"
 
     error_msg += "\nYou can configure API keys:\n"
     error_msg += "- Through the UI (recommended for regular users)\n"
     error_msg += "- Set environment variables (for developers):\n"
-    error_msg += "  - OPENAI_API_KEY for OpenAI"
+    error_msg += "  - OPENAI_API_KEY for OpenAI\n"
+    error_msg += "  - MISTRAL_API_KEY for Mistral"
 
     logger.error(f"🚨 Provider initialization failed: {error_msg}")
     raise ValueError(error_msg)
@@ -383,6 +396,46 @@ def list_provider_info() -> List[Dict[str, any]]:
                 "name": "OpenAI",
                 "available": False,
                 "configured": config_status.get("openai", {}).get("configured", False),
+                "error": str(e),
+            }
+        )
+
+    # Mistral info (second priority)
+    try:
+        if MISTRAL_AVAILABLE:
+            mistral_key = key_manager.get_api_key("mistral")
+            mistral = MistralProvider(api_key=mistral_key)
+            info.append(
+                {
+                    "type": ProviderType.MISTRAL.value,
+                    "name": "Mistral",
+                    "available": available.get(ProviderType.MISTRAL, False),
+                    "configured": config_status.get("mistral", {}).get(
+                        "configured", False
+                    ),
+                    "key_source": config_status.get("mistral", {}).get("source", "none"),
+                    "capabilities": mistral.capabilities,
+                    "default_model": mistral.get_default_model(),
+                    "description": "Magistral Small reasoning model with <think></think> output",
+                }
+            )
+        else:
+            info.append(
+                {
+                    "type": ProviderType.MISTRAL.value,
+                    "name": "Mistral",
+                    "available": False,
+                    "configured": False,
+                    "error": "Mistral package not installed (pip install mistralai)",
+                }
+            )
+    except Exception as e:
+        info.append(
+            {
+                "type": ProviderType.MISTRAL.value,
+                "name": "Mistral",
+                "available": False,
+                "configured": config_status.get("mistral", {}).get("configured", False),
                 "error": str(e),
             }
         )
