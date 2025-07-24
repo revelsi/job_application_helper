@@ -104,6 +104,32 @@ app.include_router(chat.router)
 app.include_router(documents.router)
 app.include_router(keys.router)
 
+
+@app.on_event("startup")
+async def startup_event():
+    """Warm up the default provider to eliminate cold-start delays."""
+    print("🚀 STARTUP EVENT: Beginning provider warmup...")
+    logger.info("🚀 STARTUP EVENT: Beginning provider warmup...")
+    
+    try:
+        from src.core.llm_providers.factory import get_default_provider
+        
+        print("🔧 Attempting to get default provider...")
+        logger.info("🔧 Attempting to get default provider...")
+        
+        # Simply get the default provider to warm it up
+        provider = get_default_provider()
+        print(f"✅ Warmed up provider: {type(provider).__name__}")
+        logger.info(f"✅ Warmed up provider: {type(provider).__name__}")
+        
+    except Exception as e:
+        print(f"⚠️ Provider warmup failed: {e}")
+        logger.warning(f"⚠️ Provider warmup failed (continuing anyway): {e}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
+        logger.warning(f"Traceback: {traceback.format_exc()}")
+
+
 if __name__ == "__main__":
     import uvicorn
 

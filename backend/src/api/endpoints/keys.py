@@ -26,7 +26,7 @@ from typing import Dict, List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from src.core.llm_providers.factory import get_api_key_manager, list_provider_info, clear_api_key_manager_cache, force_refresh_provider_availability
+from src.core.llm_providers.factory import get_api_key_manager, list_provider_info, clear_api_key_manager_cache, force_refresh_provider_availability, clear_provider_cache
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -156,6 +156,7 @@ async def set_api_key(request: APIKeyRequest):
             # Clear any cached provider availability to ensure fresh loading
             clear_api_key_manager_cache()
             force_refresh_provider_availability()
+            clear_provider_cache()
             
             logger.info(f"API key set successfully for {request.provider}")
             return APIKeyResponse(
@@ -199,6 +200,7 @@ async def remove_api_key(provider: str):
             # Clear any cached provider availability to ensure fresh loading
             clear_api_key_manager_cache()
             force_refresh_provider_availability()
+            clear_provider_cache()
 
             logger.info(f"API key removed successfully for {provider}")
             return APIKeyResponse(

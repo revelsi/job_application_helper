@@ -151,8 +151,9 @@ class APIKeyManager:
         return result
 
 
-# Global API key manager instance
+# Global instances
 _api_key_manager = None
+_provider_cache = None  # Cache for the default provider
 
 
 def get_api_key_manager() -> APIKeyManager:
@@ -281,6 +282,7 @@ def get_llm_provider(
 def get_default_provider() -> LLMProvider:
     """
     Get the default LLM provider based on configuration or availability.
+    Uses caching to ensure the same instance is reused across requests.
 
     This function will:
     1. Check if a default provider is set in configuration
@@ -293,6 +295,13 @@ def get_default_provider() -> LLMProvider:
     Raises:
         ValueError: If no providers are available.
     """
+    global _provider_cache
+    
+    # Return cached provider if available
+    if _provider_cache is not None:
+        logger.debug("🔄 Returning cached default provider")
+        return _provider_cache
+    
     logger.info("🔍 Starting LLM provider initialization...")
     settings = get_settings()
     key_manager = get_api_key_manager()
@@ -320,6 +329,11 @@ def get_default_provider() -> LLMProvider:
             try:
                 provider = get_llm_provider(provider_type)
                 logger.info(f"✅ Successfully initialized {provider_type.value}")
+                
+                # Cache the provider for future use
+                _provider_cache = provider
+                logger.debug("💾 Cached default provider for future requests")
+                
                 return provider
             except Exception as e:
                 logger.warning(f"❌ Failed to initialize {provider_type.value}: {e}")
@@ -346,6 +360,13 @@ def get_default_provider() -> LLMProvider:
 
     logger.error(f"🚨 Provider initialization failed: {error_msg}")
     raise ValueError(error_msg)
+
+
+def clear_provider_cache():
+    """Clear the provider cache to force re-initialization."""
+    global _provider_cache
+    _provider_cache = None
+    logger.debug("🗑️ Provider cache cleared")
 
 
 def list_provider_info() -> List[Dict[str, any]]:
