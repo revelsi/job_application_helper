@@ -68,7 +68,7 @@ class Settings(BaseSettings):
     max_company_doc_length: int = Field(default=20000, env="MAX_COMPANY_DOC_LENGTH")  # Allow comprehensive company info
 
     # Chat Generation Configuration
-    chat_max_tokens: int = Field(default=4000, env="CHAT_MAX_TOKENS")  # Increased for longer, more detailed responses
+    chat_max_tokens: int = Field(default=16000, env="CHAT_MAX_TOKENS")  # Increased for reasoning models that need space for thinking + final answer
     conversation_context_limit: int = Field(default=3, env="CONVERSATION_CONTEXT_LIMIT")
 
     # Multi-Query Configuration

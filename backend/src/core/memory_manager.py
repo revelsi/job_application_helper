@@ -449,7 +449,7 @@ class ContextWindowManager:
         """Initialize context window manager."""
         self.max_tokens = max_tokens
         self.system_message_tokens = 500  # Increased reserved space for system messages
-        self.response_buffer_tokens = 4000  # Increased buffer to match new chat_max_tokens
+        self.response_buffer_tokens = 16000  # Increased buffer to match new chat_max_tokens for reasoning models
         # Ensure we have at least some tokens available for conversation history
         self.available_tokens = max(
             1000, max_tokens - self.system_message_tokens - self.response_buffer_tokens

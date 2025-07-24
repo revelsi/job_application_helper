@@ -32,14 +32,24 @@ const generateSessionId = (): string => {
   return 'session_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now().toString(36);
 };
 
+// Pass through content as-is - let the model output naturally
+const cleanBoxedContent = (content: string): string => {
+  return content;
+};
+
 export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSendMessage, isLoading, hasApiKeys = true }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [sessionId, setSessionId] = useState<string>('');
+  const [thinkingContent, setThinkingContent] = useState('');
+  const [showThinking, setShowThinking] = useState(false);
+  const [thinkingExpanded, setThinkingExpanded] = useState(true);
+  const [currentAiMessageId, setCurrentAiMessageId] = useState<string>('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const thinkingContentRef = useRef<HTMLDivElement>(null);
 
   // Initialize session ID on component mount
   useEffect(() => {
@@ -70,6 +80,13 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSendMessage, isL
     }
   }, [messages]);
 
+  // Auto-scroll thinking content to bottom as it's generated
+  useEffect(() => {
+    if (thinkingContentRef.current && thinkingExpanded && isStreaming) {
+      thinkingContentRef.current.scrollTop = thinkingContentRef.current.scrollHeight;
+    }
+  }, [thinkingContent, thinkingExpanded, isStreaming]);
+
   const handleSendMessage = async () => {
     if (!inputMessage.trim() || isLoading || isStreaming || !sessionId) return;
 
@@ -95,6 +112,10 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSendMessage, isL
 
     setMessages(prev => [...prev, aiMessage]);
     setIsStreaming(true);
+    setCurrentAiMessageId(aiMessageId);
+    setThinkingContent('');
+    setShowThinking(false);
+    setThinkingExpanded(true);
 
     try {
       // Use secure API client for streaming
@@ -124,12 +145,72 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSendMessage, isL
             try {
               const data = JSON.parse(line.slice(6));
               
-              if (data.chunk) {
+              // Handle structured format (Mistral reasoning model)
+              if (typeof data === 'string') {
+                try {
+                  const structuredData = JSON.parse(data);
+                  
+                  if (structuredData.type === 'thinking') {
+                    // Show thinking content
+                    setShowThinking(true);
+                    setThinkingExpanded(true);
+                    setThinkingContent(prev => prev + structuredData.content);
+                  } else if (structuredData.type === 'thinking_complete') {
+                    // Keep thinking but collapse it, prepare for final answer
+                    setThinkingExpanded(false);
+                  } else if (structuredData.type === 'answer') {
+                    // Add to final answer content
+                    accumulatedContent += structuredData.content;
+                    setMessages(prev => prev.map(msg => 
+                      msg.id === aiMessageId 
+                        ? { ...msg, content: accumulatedContent }
+                        : msg
+                    ));
+                  } else if (structuredData.type === 'final_answer') {
+                    // This is the final answer from \boxed{} - display it prominently
+                    accumulatedContent += `\n\n**Final Answer:** ${structuredData.content}`;
+                    setMessages(prev => prev.map(msg => 
+                      msg.id === aiMessageId 
+                        ? { ...msg, content: accumulatedContent }
+                        : msg
+                    ));
+                  }
+                } catch (parseError) {
+                  // If not valid structured JSON, treat as regular content
+                  accumulatedContent += data;
+                  const cleanedContent = cleanBoxedContent(accumulatedContent);
+                  setMessages(prev => prev.map(msg => 
+                    msg.id === aiMessageId 
+                      ? { ...msg, content: cleanedContent }
+                      : msg
+                  ));
+                }
+              }
+              // Handle direct structured format (if already an object with type)
+              else if (data.type) {
+                if (data.type === 'thinking') {
+                  setShowThinking(true);
+                  setThinkingExpanded(true);
+                  setThinkingContent(prev => prev + data.content);
+                } else if (data.type === 'thinking_complete') {
+                  setThinkingExpanded(false);
+                } else if (data.type === 'answer') {
+                  accumulatedContent += data.content;
+                  const cleanedContent = cleanBoxedContent(accumulatedContent);
+                  setMessages(prev => prev.map(msg => 
+                    msg.id === aiMessageId 
+                      ? { ...msg, content: cleanedContent }
+                      : msg
+                  ));
+                }
+              }
+              // Handle legacy OpenAI-style format
+              else if (data.chunk) {
                 accumulatedContent += data.chunk;
-                // Update the AI message with accumulated content
+                const cleanedContent = cleanBoxedContent(accumulatedContent);
                 setMessages(prev => prev.map(msg => 
                   msg.id === aiMessageId 
-                    ? { ...msg, content: accumulatedContent }
+                    ? { ...msg, content: cleanedContent }
                     : msg
                 ));
               }
@@ -161,6 +242,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSendMessage, isL
       ));
     } finally {
       setIsStreaming(false);
+      // Don't clear thinking content - keep it for the dropdown
+      setCurrentAiMessageId('');
     }
   };
 
@@ -204,13 +287,16 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSendMessage, isL
 
         const result = response.data;
         
-        if (result && result.success) {
-          // Clear frontend state
-          setMessages([]);
-          
-          // Generate a new session ID for the next conversation
-          const newSessionId = generateSessionId();
-          setSessionId(newSessionId);
+                  if (result && result.success) {
+            // Clear frontend state
+            setMessages([]);
+            setThinkingContent('');
+            setShowThinking(false);
+            setCurrentAiMessageId('');
+            
+            // Generate a new session ID for the next conversation
+            const newSessionId = generateSessionId();
+            setSessionId(newSessionId);
           
           console.log('Chat cleared successfully:', result.message);
           console.log('Generated new session ID:', newSessionId);
@@ -223,6 +309,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSendMessage, isL
           console.error('Failed to clear chat:', result?.message || 'Unknown error');
           // Still clear frontend as fallback and generate new session ID
           setMessages([]);
+          setThinkingContent('');
+          setShowThinking(false);
+          setCurrentAiMessageId('');
           const newSessionId = generateSessionId();
           setSessionId(newSessionId);
           console.log('Generated new session ID after partial clear:', newSessionId);
@@ -232,6 +321,10 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSendMessage, isL
         console.error('Error clearing chat:', error);
         // Still clear frontend even if backend fails and generate new session ID
         setMessages([]);
+        setThinkingContent('');
+        setShowThinking(false);
+        setThinkingExpanded(true);
+        setCurrentAiMessageId('');
         const newSessionId = generateSessionId();
         setSessionId(newSessionId);
         console.log('Generated new session ID after error:', newSessionId);
@@ -342,7 +435,52 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSendMessage, isL
           ))
         )}
         
-        {isStreaming && (
+        {/* Show thinking process when available */}
+        {showThinking && thinkingContent && (
+          <div className="flex gap-4 justify-start">
+            <div className="flex gap-4 max-w-[85%]">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-purple-500 text-white flex items-center justify-center shadow-sm">
+                <Bot className="h-5 w-5" />
+              </div>
+              <div className="rounded-2xl bg-purple-50 border border-purple-200 shadow-sm">
+                <div 
+                  className="flex items-center gap-2 p-4 cursor-pointer hover:bg-purple-100 rounded-t-2xl"
+                  onClick={() => setThinkingExpanded(!thinkingExpanded)}
+                >
+                  <div className="flex gap-1">
+                    {thinkingExpanded && isStreaming ? (
+                      <>
+                        <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse"></div>
+                        <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
+                        <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+                      </>
+                    ) : (
+                      <ChevronDown className={`h-4 w-4 text-purple-600 transition-transform ${thinkingExpanded ? 'rotate-180' : ''}`} />
+                    )}
+                  </div>
+                  <span className="text-sm font-medium text-purple-700">
+                    {thinkingExpanded && isStreaming ? 'AI is thinking through this...' : 'AI reasoning process'}
+                  </span>
+                  {!thinkingExpanded && (
+                    <span className="text-xs text-purple-500 ml-auto">Click to expand</span>
+                  )}
+                </div>
+                {thinkingExpanded && (
+                  <div className="px-4 pb-4 border-t border-purple-200">
+                    <div 
+                      ref={thinkingContentRef}
+                      className="text-sm text-purple-800 whitespace-pre-wrap max-h-64 overflow-y-auto mt-2 scrollbar-thin scrollbar-thumb-purple-300 scrollbar-track-purple-100"
+                    >
+                      {thinkingContent}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isStreaming && !showThinking && (
           <div className="flex gap-4 justify-start">
             <div className="flex gap-4 max-w-[85%]">
               <div className="flex-shrink-0 w-10 h-10 rounded-full bg-green-500 text-white flex items-center justify-center shadow-sm">
@@ -355,7 +493,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSendMessage, isL
                     <div className="w-2 h-2 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
                     <div className="w-2 h-2 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                   </div>
-                  <span className="text-sm text-muted-foreground">AI is thinking...</span>
+                  <span className="text-sm text-muted-foreground">AI is responding...</span>
                 </div>
               </div>
             </div>

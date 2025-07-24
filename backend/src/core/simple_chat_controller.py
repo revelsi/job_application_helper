@@ -158,7 +158,7 @@ class SimpleChatController:
                 prompt=prompt,
                 content_type=content_type,
                 context=context,
-                max_tokens=getattr(self.settings, "chat_max_tokens", 4000),  # Updated default
+                max_tokens=getattr(self.settings, "chat_max_tokens", 16000),  # Updated default for reasoning models
                 temperature=0.7,
             )
             
@@ -274,7 +274,7 @@ class SimpleChatController:
                 prompt=prompt,
                 content_type=content_type,
                 context=context,
-                max_tokens=getattr(self.settings, "chat_max_tokens", 4000),  # Updated default
+                max_tokens=getattr(self.settings, "chat_max_tokens", 16000),  # Updated default for reasoning models
                 temperature=0.7,
             )
             
@@ -390,6 +390,9 @@ class SimpleChatController:
         """
         Build the prompt for LLM generation.
         
+        For Mistral reasoning models, we let Mistral handle the system prompt
+        and just provide the user request with context.
+        
         Args:
             message: User message
             context: Document context
@@ -398,37 +401,22 @@ class SimpleChatController:
         Returns:
             Formatted prompt string
         """
-        # Get base prompt based on content type
-        if content_type == ContentType.COVER_LETTER:
-            base_prompt = self._get_cover_letter_prompt()
-        elif content_type == ContentType.INTERVIEW_ANSWER:
-            base_prompt = self._get_interview_answer_prompt()
-        elif content_type == ContentType.CONTENT_REFINEMENT:
-            base_prompt = self._get_content_refinement_prompt()
-        else:
-            base_prompt = self._get_general_response_prompt()
+        # For Mistral reasoning models, we let Mistral handle the system prompt
+        # and just provide a clear user request with context
         
         # Add document context if available
         if context.get("has_context", False):
             context_text = context.get("context_text", "")
-            prompt = f"""{base_prompt}
-
-DOCUMENT CONTEXT:
+            prompt = f"""DOCUMENT CONTEXT:
 {context_text}
 
 USER REQUEST: {message}
 
-Please provide a helpful response based on the document context above. If the context doesn't contain relevant information, please say so and provide general guidance.
-
-Response:"""
+Please provide a helpful response based on the document context above. If the context doesn't contain relevant information, please say so and provide general guidance."""
         else:
-            prompt = f"""{base_prompt}
+            prompt = f"""USER REQUEST: {message}
 
-USER REQUEST: {message}
-
-IMPORTANT: You don't have access to any specific documents about this user's background, experience, or job details. Please provide general guidance and suggest that the user upload relevant documents (CV, job descriptions, etc.) for more personalized assistance.
-
-Response:"""
+Note: You don't have access to any specific documents about this user's background, experience, or job details. Please provide general guidance and suggest that the user upload relevant documents (CV, job descriptions, etc.) for more personalized assistance."""
         
         return prompt
     

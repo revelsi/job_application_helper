@@ -180,8 +180,19 @@ async def chat_stream(
                 conversation_history=history,
                 session_id=request.session_id,
             ):
-                # Send chunk as JSON
-                yield f"data: {json.dumps({'chunk': chunk, 'session_id': chat_controller.current_session_id or 'no_session'})}\n\n"
+                # Check if chunk is already structured JSON (from Mistral provider)
+                try:
+                    # Try to parse chunk as JSON to see if it's structured
+                    parsed_chunk = json.loads(chunk)
+                    if isinstance(parsed_chunk, dict) and 'type' in parsed_chunk:
+                        # This is structured format from Mistral - send as string for frontend to parse
+                        yield f"data: {json.dumps(chunk)}\n\n"
+                    else:
+                        # Regular content - wrap in old format for backward compatibility
+                        yield f"data: {json.dumps({'chunk': chunk, 'session_id': chat_controller.current_session_id or 'no_session'})}\n\n"
+                except json.JSONDecodeError:
+                    # Not JSON - wrap in old format for backward compatibility (OpenAI style)
+                    yield f"data: {json.dumps({'chunk': chunk, 'session_id': chat_controller.current_session_id or 'no_session'})}\n\n"
 
             # Send end marker
             yield f"data: {json.dumps({'done': True, 'session_id': chat_controller.current_session_id or 'no_session'})}\n\n"
