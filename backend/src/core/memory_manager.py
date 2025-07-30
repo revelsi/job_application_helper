@@ -473,32 +473,27 @@ class ContextWindowManager:
         current_tokens = 0
         included_messages = []
 
-        # Process messages in reverse order (most recent first)
-        for i, message in enumerate(reversed(messages)):
+        # Process messages in chronological order (oldest first)
+        for message in messages:
             estimated_tokens = self._estimate_tokens(message.content)
 
             if current_tokens + estimated_tokens <= self.available_tokens:
-                included_messages.insert(0, message.to_dict())
+                included_messages.append(message.to_dict())
                 current_tokens += estimated_tokens
             else:
-                # Try to include a summary of earlier context
+                # If we can't fit this message, try to include a summary of what we're missing
                 if len(included_messages) > 0:
-                    # Get the messages that weren't included (earlier messages)
-                    excluded_messages = messages[
-                        : len(messages) - len(included_messages)
-                    ]
+                    # Get the messages that weren't included (remaining messages)
+                    excluded_messages = messages[messages.index(message):]
                     if excluded_messages:
                         summary = self._create_context_summary(excluded_messages)
                         if summary:
                             summary_tokens = self._estimate_tokens(summary)
                             if current_tokens + summary_tokens <= self.available_tokens:
-                                included_messages.insert(
-                                    0,
-                                    {
-                                        "role": "system",
-                                        "content": f"Previous conversation summary: {summary}",
-                                    },
-                                )
+                                included_messages.append({
+                                    "role": "system",
+                                    "content": f"Previous conversation summary: {summary}",
+                                })
                 break
 
         optimized_messages.extend(included_messages)
@@ -522,14 +517,26 @@ class ContextWindowManager:
         if not user_messages:
             return ""
 
-        # Create a brief summary
+        # Create a more comprehensive summary
         summary_parts = []
+        
+        # Include recent user requests (last 2-3)
         if user_messages:
-            summary_parts.append(f"User discussed: {user_messages[-1][:100]}...")
+            recent_user_messages = user_messages[-3:]  # Last 3 user messages
+            if len(recent_user_messages) == 1:
+                summary_parts.append(f"User requested: {recent_user_messages[0][:150]}...")
+            else:
+                user_summary = "; ".join([msg[:100] + "..." for msg in recent_user_messages])
+                summary_parts.append(f"User discussed: {user_summary}")
+        
+        # Include recent assistant responses (last 2-3)
         if assistant_messages:
-            summary_parts.append(
-                f"Assistant helped with: {assistant_messages[-1][:100]}..."
-            )
+            recent_assistant_messages = assistant_messages[-3:]  # Last 3 assistant messages
+            if len(recent_assistant_messages) == 1:
+                summary_parts.append(f"Assistant provided: {recent_assistant_messages[0][:150]}...")
+            else:
+                assistant_summary = "; ".join([msg[:100] + "..." for msg in recent_assistant_messages])
+                summary_parts.append(f"Assistant helped with: {assistant_summary}")
 
         return " ".join(summary_parts)
 

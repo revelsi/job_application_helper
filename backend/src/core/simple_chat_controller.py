@@ -150,8 +150,17 @@ class SimpleChatController:
             # Get document context
             context = self._get_document_context(sanitized_message)
             
-            # Build prompt with context
-            prompt = self._build_prompt(sanitized_message, context, content_type)
+            # Get conversation history from memory manager if available
+            conversation_context = None
+            if self.memory_available and self.current_session_id:
+                # Get conversation context from memory manager (includes history)
+                conversation_context = self.memory_manager.get_conversation_context(
+                    self.current_session_id
+                )
+                self.logger.debug(f"Retrieved {len(conversation_context)} conversation messages from memory")
+            
+            # Build prompt with context and conversation history
+            prompt = self._build_prompt(sanitized_message, context, content_type, conversation_context)
             
             # Generate response
             generation_request = GenerationRequest(
@@ -189,6 +198,7 @@ class SimpleChatController:
                         "processing_time": time.time() - start_time,
                         "has_document_context": context.get("has_context", False),
                         "document_counts": context.get("document_counts", {}),
+                        "conversation_messages": len(conversation_context) if conversation_context else 0,
                     },
                 )
             else:
@@ -266,8 +276,17 @@ class SimpleChatController:
             # Get document context
             context = self._get_document_context(sanitized_message)
             
-            # Build prompt with context
-            prompt = self._build_prompt(sanitized_message, context, content_type)
+            # Get conversation history from memory manager if available
+            conversation_context = None
+            if self.memory_available and self.current_session_id:
+                # Get conversation context from memory manager (includes history)
+                conversation_context = self.memory_manager.get_conversation_context(
+                    self.current_session_id
+                )
+                self.logger.debug(f"Retrieved {len(conversation_context)} conversation messages from memory for streaming")
+            
+            # Build prompt with context and conversation history
+            prompt = self._build_prompt(sanitized_message, context, content_type, conversation_context)
             
             # Generate streaming response
             generation_request = GenerationRequest(
@@ -385,7 +404,8 @@ class SimpleChatController:
         self, 
         message: str, 
         context: Dict[str, Any], 
-        content_type: ContentType
+        content_type: ContentType,
+        conversation_context: Optional[List[Dict[str, Any]]] = None
     ) -> str:
         """
         Build the prompt for LLM generation.
@@ -397,6 +417,7 @@ class SimpleChatController:
             message: User message
             context: Document context
             content_type: Type of content to generate
+            conversation_context: Previous conversation messages for context
             
         Returns:
             Formatted prompt string
@@ -404,21 +425,39 @@ class SimpleChatController:
         # For Mistral reasoning models, we let Mistral handle the system prompt
         # and just provide a clear user request with context
         
+        prompt_parts = []
+        
         # Add document context if available
         if context.get("has_context", False):
             context_text = context.get("context_text", "")
-            prompt = f"""DOCUMENT CONTEXT:
-{context_text}
-
-USER REQUEST: {message}
-
-Please provide a helpful response based on the document context above. If the context doesn't contain relevant information, please say so and provide general guidance."""
-        else:
-            prompt = f"""USER REQUEST: {message}
-
-Note: You don't have access to any specific documents about this user's background, experience, or job details. Please provide general guidance and suggest that the user upload relevant documents (CV, job descriptions, etc.) for more personalized assistance."""
+            prompt_parts.append(f"DOCUMENT CONTEXT:\n{context_text}")
         
-        return prompt
+        # Add conversation history if available
+        if conversation_context and len(conversation_context) > 1:  # More than just the current message
+            # Filter out system messages and format conversation history
+            conversation_messages = []
+            for msg in conversation_context:
+                if msg.get("role") != "system":
+                    role = "User" if msg.get("role") == "user" else "Assistant"
+                    content = msg.get("content", "")
+                    conversation_messages.append(f"{role}: {content}")
+            
+            if conversation_messages:
+                # Include recent conversation history (last 6 messages to avoid token limits)
+                recent_history = conversation_messages[-6:]
+                history_text = "\n".join(recent_history)
+                prompt_parts.append(f"CONVERSATION HISTORY:\n{history_text}")
+        
+        # Add current user request
+        prompt_parts.append(f"USER REQUEST: {message}")
+        
+        # Add guidance
+        if context.get("has_context", False):
+            prompt_parts.append("Please provide a helpful response based on the document context above. If the context doesn't contain relevant information, please say so and provide general guidance.")
+        else:
+            prompt_parts.append("Note: You don't have access to any specific documents about this user's background, experience, or job details. Please provide general guidance and suggest that the user upload relevant documents (CV, job descriptions, etc.) for more personalized assistance.")
+        
+        return "\n\n".join(prompt_parts)
     
     def _get_cover_letter_prompt(self) -> str:
         """Get prompt for cover letter generation."""
