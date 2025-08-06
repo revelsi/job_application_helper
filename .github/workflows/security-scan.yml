@@ -38,50 +38,51 @@ jobs:
         
     - name: Generate Security Summary
       run: |
-        python3 -c "
-import json
-import os
-from datetime import datetime
+        cat > generate_summary.py << 'EOF'
+        import json
+        import os
+        from datetime import datetime
 
-def load_findings(filename):
-    if os.path.exists(filename):
-        with open(filename, 'r') as f:
-            data = json.load(f)
-            return data.get('results', [])
-    return []
+        def load_findings(filename):
+            if os.path.exists(filename):
+                with open(filename, 'r') as f:
+                    data = json.load(f)
+                    return data.get('results', [])
+            return []
 
-# Load all findings
-all_findings = []
-reports = ['security-reports/security-vulnerabilities.json', 'security-reports/python-security.json', 
-           'security-reports/typescript-security.json', 'security-reports/auth-security.json',
-           'security-reports/file-upload-security.json', 'security-reports/web-security.json',
-           'security-reports/secrets-scan.json']
+        # Load all findings
+        all_findings = []
+        reports = ['security-reports/security-vulnerabilities.json', 'security-reports/python-security.json', 
+                   'security-reports/typescript-security.json', 'security-reports/auth-security.json',
+                   'security-reports/file-upload-security.json', 'security-reports/web-security.json',
+                   'security-reports/secrets-scan.json']
 
-for report in reports:
-    findings = load_findings(report)
-    all_findings.extend(findings)
+        for report in reports:
+            findings = load_findings(report)
+            all_findings.extend(findings)
 
-# Categorize by severity
-severity_counts = {'ERROR': 0, 'WARNING': 0, 'INFO': 0}
-critical_findings = []
+        # Categorize by severity
+        severity_counts = {'ERROR': 0, 'WARNING': 0, 'INFO': 0}
+        critical_findings = []
 
-for finding in all_findings:
-    severity = finding.get('extra', {}).get('severity', 'INFO')
-    severity_counts[severity] += 1
-    
-    if severity == 'ERROR':
-        critical_findings.append(finding)
+        for finding in all_findings:
+            severity = finding.get('extra', {}).get('severity', 'INFO')
+            severity_counts[severity] += 1
+            
+            if severity == 'ERROR':
+                critical_findings.append(finding)
 
-summary = {
-    'scan_date': datetime.now().isoformat(),
-    'total_findings': len(all_findings),
-    'severity_breakdown': severity_counts,
-    'critical_findings': critical_findings[:10]  # Limit to first 10
-}
+        summary = {
+            'scan_date': datetime.now().isoformat(),
+            'total_findings': len(all_findings),
+            'severity_breakdown': severity_counts,
+            'critical_findings': critical_findings[:10]  # Limit to first 10
+        }
 
-with open('security-reports/scan-summary.json', 'w') as f:
-    json.dump(summary, f, indent=2)
-"
+        with open('security-reports/scan-summary.json', 'w') as f:
+            json.dump(summary, f, indent=2)
+        EOF
+        python3 generate_summary.py
 
     - name: Upload Security Reports
       uses: actions/upload-artifact@v4
@@ -94,12 +95,7 @@ with open('security-reports/scan-summary.json', 'w') as f:
     - name: Check for Critical Vulnerabilities
       run: |
         if [ -f "security-reports/scan-summary.json" ]; then
-          CRITICAL_COUNT=$(python3 -c "
-import json
-with open('security-reports/scan-summary.json', 'r') as f:
-    summary = json.load(f)
-print(summary['severity_breakdown']['ERROR'])
-")
+          CRITICAL_COUNT=$(python3 -c "import json; summary = json.load(open('security-reports/scan-summary.json')); print(summary['severity_breakdown']['ERROR'])")
           
           if [ "$CRITICAL_COUNT" -gt 0 ]; then
             echo "🚨 CRITICAL SECURITY VULNERABILITIES FOUND: $CRITICAL_COUNT"
@@ -212,16 +208,7 @@ print(summary['severity_breakdown']['ERROR'])
         
         # Check Python dependencies
         if [ -f "backend/safety-report.json" ]; then
-          PYTHON_VULNS=$(python3 -c "
-import json
-try:
-    with open('backend/safety-report.json', 'r') as f:
-        data = json.load(f)
-    high_critical = sum(1 for vuln in data if vuln.get('severity') in ['high', 'critical'])
-    print(high_critical)
-except:
-    print(0)
-")
+          PYTHON_VULNS=$(python3 -c "import json; data = json.load(open('backend/safety-report.json')) if open('backend/safety-report.json') else []; print(sum(1 for vuln in data if vuln.get('severity') in ['high', 'critical']))" 2>/dev/null || echo 0)
           
           if [ "$PYTHON_VULNS" -gt 0 ]; then
             echo "⚠️  PYTHON DEPENDENCY VULNERABILITIES: $PYTHON_VULNS high/critical"
@@ -231,17 +218,7 @@ except:
         
         # Check Node.js dependencies
         if [ -f "frontend/npm-audit-report.json" ]; then
-          NODE_VULNS=$(python3 -c "
-import json
-try:
-    with open('frontend/npm-audit-report.json', 'r') as f:
-        data = json.load(f)
-    high_critical = sum(1 for vuln in data.get('vulnerabilities', {}).values() 
-                      if vuln.get('severity') in ['high', 'critical'])
-    print(high_critical)
-except:
-    print(0)
-")
+          NODE_VULNS=$(python3 -c "import json; data = json.load(open('frontend/npm-audit-report.json')); print(sum(1 for vuln in data.get('vulnerabilities', {}).values() if vuln.get('severity') in ['high', 'critical']))" 2>/dev/null || echo 0)
           
           if [ "$NODE_VULNS" -gt 0 ]; then
             echo "⚠️  NODE.JS DEPENDENCY VULNERABILITIES: $NODE_VULNS high/critical"
