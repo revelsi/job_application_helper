@@ -238,4 +238,6 @@ security_report.json
 bandit_results.json
 bandit_report.json
 *.security.json
-security_audit_*.json 
+security_audit_*.json
+security-reports/
+SECURITY_TODO.md 

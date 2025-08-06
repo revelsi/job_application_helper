@@ -1,0 +1,117 @@
+# Cursor IDE Ignore File
+# Prevents Cursor from indexing sensitive or unnecessary files
+
+# Security and sensitive files
+.env*
+*.key
+*.pem
+*.p12
+*.pfx
+secrets/
+credentials/
+data/credentials.enc
+**/credentials.enc
+*api_key*
+*token*
+*secret*
+*password*
+auth.json
+config.json
+
+# Security reports and scans
+security-reports/
+*.security.json
+security_audit_*.json
+bandit_results.json
+bandit_report.json
+
+# User data and documents
+data/documents/
+data/cache/
+data/company_cache/
+data/vector_db/
+data/uploads/
+data/memory.db
+data/chat_memory.db
+user_data/
+documents/
+uploads/
+
+# Large model files
+*.model
+*.bin
+*.h5
+*.pkl
+*.pickle
+models/
+embeddings/
+checkpoints/
+
+# Build artifacts
+node_modules/
+/build
+/dist
+/.next/
+/out/
+frontend/build/
+frontend/dist/
+frontend/.next/
+frontend/out/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyc
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.tox/
+.ruff_cache/
+
+# Database files
+*.sqlite
+*.sqlite3
+*.db
+
+# Logs and temporary files
+*.log
+logs/
+debug/
+.logs/
+tmp/
+temp/
+*.tmp
+*.temp
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+
+# Documentation (optional - remove if you want Cursor to index docs)
+docs/phases/
+evaluation_results/ 

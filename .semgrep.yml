@@ -1,0 +1,441 @@
+rules:
+  # =============================================================================
+  # API KEY & SECRET MANAGEMENT SECURITY
+  # =============================================================================
+  
+  - id: hardcoded-api-key
+    patterns:
+      - pattern-either:
+          - pattern: $VAR = "sk-..."
+          - pattern: $VAR = "pk_..."
+          - pattern: $VAR = "OPENAI_API_KEY"
+          - pattern: |
+              $DICT = {..., "api_key": "...", ...}
+    message: "Hardcoded API key detected. Use environment variables instead."
+    severity: ERROR
+    languages: [python, typescript, javascript]
+    metadata:
+      category: security
+      cwe: "CWE-798: Use of Hard-coded Credentials"
+      owasp: "A07:2021 – Identification and Authentication Failures"
+      
+  - id: api-key-in-logs
+    patterns:
+      - pattern-either:
+          - pattern: logger.$METHOD(..., $API_KEY, ...)
+          - pattern: print(..., $API_KEY, ...)
+          - pattern: console.log(..., $API_KEY, ...)
+      - metavariable-regex:
+          metavariable: $API_KEY
+          regex: .*(api_key|token|secret|password).*
+    message: "Potential API key or secret in logs. Remove sensitive data from logs."
+    severity: ERROR
+    languages: [python, typescript, javascript]
+    metadata:
+      category: security
+      cwe: "CWE-532: Insertion of Sensitive Information into Log File"
+
+  # =============================================================================
+  # FILE UPLOAD SECURITY
+  # =============================================================================
+  
+  - id: unsafe-file-upload
+    patterns:
+      - pattern: |
+          $FILE = $REQUEST.file
+          ...
+          $FILE.save($PATH)
+      - pattern-not-inside: |
+          if $FILE.filename.endswith(...):
+              ...
+    message: "File upload without validation. Add file type, size, and content validation."
+    severity: ERROR
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-434: Unrestricted Upload of File with Dangerous Type"
+      
+  - id: path-traversal-vulnerability
+    patterns:
+      - pattern-either:
+          - pattern: open($FILENAME, ...)
+          - pattern: Path($FILENAME)
+      - pattern-inside: |
+          $FILENAME = $REQUEST.$ATTR.filename
+          ...
+      - pattern-not-inside: |
+          $FILENAME = secure_filename($REQUEST.$ATTR.filename)
+          ...
+    message: "Path traversal vulnerability. Sanitize filename and validate path."
+    severity: ERROR
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-22: Improper Limitation of a Pathname to a Restricted Directory"
+
+  # =============================================================================
+  # SQL INJECTION PREVENTION
+  # =============================================================================
+  
+  - id: sql-injection-f-string
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $QUERY = f"SELECT ... {$VAR} ..."
+              $CONN.execute($QUERY)
+          - pattern: |
+              $QUERY = f"INSERT ... VALUES ({$VAR}) ..."
+              $CONN.execute($QUERY)
+          - pattern: |
+              $QUERY = f"UPDATE ... SET ... = {$VAR} ..."
+              $CONN.execute($QUERY)
+    message: "SQL injection vulnerability. Use parameterized queries instead of f-strings."
+    severity: ERROR
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-89: Improper Neutralization of Special Elements used in an SQL Command"
+      
+  - id: sql-injection-concatenation
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $QUERY = "SELECT ..." + $VAR + "..."
+              $CONN.execute($QUERY)
+          - pattern: |
+              $QUERY = "SELECT ..." % ($VAR,)
+              $CONN.execute($QUERY)
+    message: "SQL injection vulnerability. Use parameterized queries instead of string concatenation."
+    severity: ERROR
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-89: Improper Neutralization of Special Elements used in an SQL Command"
+
+  # =============================================================================
+  # AUTHENTICATION & AUTHORIZATION
+  # =============================================================================
+  
+  - id: missing-authentication
+    patterns:
+      - pattern: |
+          @$ROUTER.$METHOD("$PATH")
+          async def $FUNC(...):
+              ...
+      - pattern-not-inside: |
+          @$ROUTER.$METHOD("$PATH", dependencies=[Depends($AUTH)])
+          async def $FUNC(...):
+              ...
+      - pattern-not-inside: |
+          async def $FUNC(..., current_user: ... = Depends($AUTH)):
+              ...
+      - metavariable-regex:
+          metavariable: $PATH
+          regex: ^/(api|admin|protected).*
+    message: "Protected endpoint missing authentication. Add authentication dependency."
+    severity: WARNING
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-306: Missing Authentication for Critical Function"
+
+  - id: weak-password-validation
+    patterns:
+      - pattern: |
+          if len($PASSWORD) < 8:
+              ...
+      - pattern-not-inside: |
+          if not re.match(r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$", $PASSWORD):
+              ...
+    message: "Weak password validation. Implement strong password requirements."
+    severity: WARNING
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-521: Weak Password Requirements"
+
+  # =============================================================================
+  # XSS & CLIENT-SIDE SECURITY
+  # =============================================================================
+  
+  - id: dangerous-inner-html
+    patterns:
+      - pattern-either:
+          - pattern: |
+              dangerouslySetInnerHTML={{__html: $VAR}}
+          - pattern: |
+              innerHTML = $VAR
+    message: "Potential XSS vulnerability. Sanitize user input before using dangerouslySetInnerHTML or innerHTML."
+    severity: ERROR
+    languages: [typescript, javascript]
+    metadata:
+      category: security
+      cwe: "CWE-79: Improper Neutralization of Input During Web Page Generation"
+      
+  - id: unsafe-eval
+    patterns:
+      - pattern-either:
+          - pattern: eval($VAR)
+          - pattern: Function($VAR)()
+          - pattern: setTimeout($VAR, ...)
+          - pattern: setInterval($VAR, ...)
+    message: "Unsafe code execution. Avoid eval() and similar functions with user input."
+    severity: ERROR
+    languages: [typescript, javascript]
+    metadata:
+      category: security
+      cwe: "CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code"
+
+  # =============================================================================
+  # CORS & WEB SECURITY
+  # =============================================================================
+  
+  - id: permissive-cors
+    patterns:
+      - pattern-either:
+          - pattern: |
+              CORSMiddleware(..., allow_origins=["*"], ...)
+          - pattern: |
+              add_middleware(CORSMiddleware, allow_origins=["*"])
+    message: "Overly permissive CORS policy. Specify exact allowed origins."
+    severity: WARNING
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-942: Permissive Cross-domain Policy with Untrusted Domains"
+      
+  - id: missing-security-headers
+    patterns:
+      - pattern: |
+          return $RESPONSE(...)
+      - pattern-not-inside: |
+          $RESPONSE.headers["Content-Security-Policy"] = ...
+          ...
+      - pattern-not-inside: |
+          $RESPONSE.headers["X-Frame-Options"] = ...
+          ...
+    message: "Missing security headers. Add CSP, X-Frame-Options, and other security headers."
+    severity: WARNING
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-693: Protection Mechanism Failure"
+
+  # =============================================================================
+  # CRYPTOGRAPHY & HASHING
+  # =============================================================================
+  
+  - id: weak-hash-algorithm
+    patterns:
+      - pattern-either:
+          - pattern: hashlib.md5($DATA)
+          - pattern: hashlib.sha1($DATA)
+    message: "Weak cryptographic hash function. Use SHA-256 or stronger algorithms."
+    severity: ERROR
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-327: Use of a Broken or Risky Cryptographic Algorithm"
+      
+  - id: hardcoded-secret-key
+    patterns:
+      - pattern-either:
+          - pattern: |
+              SECRET_KEY = "..."
+          - pattern: |
+              $APP.secret_key = "..."
+    message: "Hardcoded secret key. Use environment variables for secrets."
+    severity: ERROR
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-798: Use of Hard-coded Credentials"
+
+  # =============================================================================
+  # ERROR HANDLING & LOGGING
+  # =============================================================================
+  
+  - id: generic-exception-handling
+    patterns:
+      - pattern: |
+          try:
+              ...
+          except Exception as $E:
+              logger.error($MSG)
+      - pattern-not-inside: |
+          try:
+              ...
+          except $SPECIFIC_EXCEPTION as $E:
+              ...
+          except Exception as $E:
+              ...
+    message: "Overly broad exception handling. Use specific exception types."
+    severity: WARNING
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-396: Declaration of Catch for Generic Exception"
+      
+  - id: sensitive-data-in-logs
+    patterns:
+      - pattern-either:
+          - pattern: logger.$METHOD(f"... {$VAR} ...")
+          - pattern: print(f"... {$VAR} ...")
+      - metavariable-regex:
+          metavariable: $VAR
+          regex: .*(password|token|key|secret|credential).*
+    message: "Sensitive data in logs. Remove or mask sensitive information."
+    severity: WARNING
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-532: Insertion of Sensitive Information into Log File"
+
+  # =============================================================================
+  # FILE SYSTEM SECURITY
+  # =============================================================================
+  
+  - id: insecure-file-permissions
+    patterns:
+      - pattern-either:
+          - pattern: os.chmod($PATH, 0o777)
+          - pattern: $PATH.chmod(0o777)
+          - pattern: os.chmod($PATH, 0o666)
+    message: "Insecure file permissions. Use restrictive permissions for sensitive files."
+    severity: ERROR
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-732: Incorrect Permission Assignment for Critical Resource"
+      
+  - id: unsafe-temp-file
+    patterns:
+      - pattern: |
+          $TEMP = tempfile.mktemp()
+          open($TEMP, ...)
+      - pattern-not: |
+          $TEMP = tempfile.NamedTemporaryFile(...)
+    message: "Unsafe temporary file creation. Use tempfile.NamedTemporaryFile() instead."
+    severity: WARNING
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-377: Insecure Temporary File"
+
+  # =============================================================================
+  # CONFIGURATION & ENVIRONMENT
+  # =============================================================================
+  
+  - id: debug-mode-enabled
+    patterns:
+      - pattern-either:
+          - pattern: |
+              DEBUG = True
+          - pattern: |
+              debug = True
+          - pattern: |
+              $APP.debug = True
+    message: "Debug mode enabled. Ensure this is disabled in production."
+    severity: WARNING
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-489: Active Debug Code"
+      
+  - id: missing-env-var-validation
+    patterns:
+      - pattern: |
+          $VAR = os.getenv("$ENV_NAME")
+          $VAR.$METHOD(...)
+      - pattern-not-inside: |
+          $VAR = os.getenv("$ENV_NAME")
+          if not $VAR:
+              raise ValueError(...)
+          ...
+    message: "Missing environment variable validation. Check for None values."
+    severity: WARNING
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-20: Improper Input Validation"
+
+  # =============================================================================
+  # DOCKER SECURITY
+  # =============================================================================
+  
+  - id: docker-root-user
+    pattern: |
+      USER root
+    message: "Running as root in Docker container. Use non-privileged user."
+    severity: WARNING
+    languages: [dockerfile]
+    metadata:
+      category: security
+      cwe: "CWE-250: Execution with Unnecessary Privileges"
+      
+  - id: docker-add-instead-copy
+    pattern: |
+      ADD $SRC $DEST
+    message: "Use COPY instead of ADD for local files. ADD has additional risks."
+    severity: WARNING
+    languages: [dockerfile]
+    metadata:
+      category: security
+      cwe: "CWE-829: Inclusion of Functionality from Untrusted Control Sphere"
+
+  # =============================================================================
+  # CLIENT-SIDE SECURITY (TypeScript/JavaScript)
+  # =============================================================================
+  
+  - id: client-side-secrets
+    patterns:
+      - pattern-either:
+          - pattern: |
+              const $VAR = "$SECRET"
+          - pattern: |
+              let $VAR = "$SECRET"
+      - metavariable-regex:
+          metavariable: $SECRET
+          regex: ^(sk-|pk_|[A-Za-z0-9]{20,})$
+    message: "Secret stored in client-side code. Move sensitive data to server-side."
+    severity: ERROR
+    languages: [typescript, javascript]
+    metadata:
+      category: security
+      cwe: "CWE-312: Cleartext Storage of Sensitive Information"
+      
+  - id: unsafe-url-construction
+    patterns:
+      - pattern: |
+          $URL = $BASE + $USER_INPUT
+          fetch($URL)
+      - pattern-not-inside: |
+          $SAFE_INPUT = encodeURIComponent($USER_INPUT)
+          ...
+    message: "Unsafe URL construction with user input. Validate and encode user input."
+    severity: WARNING
+    languages: [typescript, javascript]
+    metadata:
+      category: security
+      cwe: "CWE-20: Improper Input Validation"
+
+  # =============================================================================
+  # INPUT VALIDATION
+  # =============================================================================
+  
+  - id: missing-input-validation
+    patterns:
+      - pattern: |
+          @$ROUTER.$METHOD("$PATH")
+          async def $FUNC($PARAM: str):
+              ...
+      - pattern-not-inside: |
+          @$ROUTER.$METHOD("$PATH")
+          async def $FUNC($PARAM: str = $VALIDATOR(...)):
+              ...
+    message: "Missing input validation. Add proper validation for user inputs."
+    severity: WARNING
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-20: Improper Input Validation"
