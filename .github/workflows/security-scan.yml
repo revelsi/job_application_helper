@@ -53,7 +53,9 @@ jobs:
         # Load all findings
         all_findings = []
         reports = ['security-reports/security-vulnerabilities.json', 'security-reports/python-security.json', 
-                   'security-reports/typescript-security.json', 'security-reports/auth-security.json']
+                   'security-reports/typescript-security.json', 'security-reports/auth-security.json',
+                   'security-reports/file-upload-security.json', 'security-reports/web-security.json',
+                   'security-reports/secrets-scan.json']
         
         for report in reports:
             findings = load_findings(report)
