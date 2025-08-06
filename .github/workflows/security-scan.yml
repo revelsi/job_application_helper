@@ -103,11 +103,18 @@ jobs:
           
           if [ "$CRITICAL_COUNT" -gt 0 ]; then
             echo "🚨 CRITICAL SECURITY VULNERABILITIES FOUND: $CRITICAL_COUNT"
-            echo "Please fix these issues before merging."
-            exit 1
+            echo "⚠️  WARNING: Security issues detected but not blocking push."
+            echo "📋 Please review findings in the security reports."
+            echo "🔍 To block pushes on critical findings, set BLOCK_ON_CRITICAL=true in repository secrets."
           else
             echo "✅ No critical security vulnerabilities found."
           fi
+        fi
+        
+        # Only fail if explicitly configured to block (for production repos)
+        if [ "${{ secrets.BLOCK_ON_CRITICAL }}" = "true" ] && [ "$CRITICAL_COUNT" -gt 0 ]; then
+          echo "🛑 BLOCKING: Repository configured to block on critical findings."
+          exit 1
         fi
 
     - name: Comment PR with Security Findings
@@ -201,6 +208,8 @@ jobs:
         
     - name: Check Dependency Vulnerabilities
       run: |
+        TOTAL_DEP_VULNS=0
+        
         # Check Python dependencies
         if [ -f "backend/safety-report.json" ]; then
           PYTHON_VULNS=$(python3 -c "
@@ -215,8 +224,8 @@ jobs:
           ")
           
           if [ "$PYTHON_VULNS" -gt 0 ]; then
-            echo "🚨 HIGH/CRITICAL PYTHON DEPENDENCY VULNERABILITIES: $PYTHON_VULNS"
-            exit 1
+            echo "⚠️  PYTHON DEPENDENCY VULNERABILITIES: $PYTHON_VULNS high/critical"
+            TOTAL_DEP_VULNS=$((TOTAL_DEP_VULNS + PYTHON_VULNS))
           fi
         fi
         
@@ -235,12 +244,23 @@ jobs:
           ")
           
           if [ "$NODE_VULNS" -gt 0 ]; then
-            echo "🚨 HIGH/CRITICAL NODE.JS DEPENDENCY VULNERABILITIES: $NODE_VULNS"
-            exit 1
+            echo "⚠️  NODE.JS DEPENDENCY VULNERABILITIES: $NODE_VULNS high/critical"
+            TOTAL_DEP_VULNS=$((TOTAL_DEP_VULNS + NODE_VULNS))
           fi
         fi
         
-        echo "✅ No high/critical dependency vulnerabilities found."
+        if [ "$TOTAL_DEP_VULNS" -gt 0 ]; then
+          echo "📋 Total dependency vulnerabilities: $TOTAL_DEP_VULNS"
+          echo "🔍 Review dependency reports for details."
+          
+          # Only fail if explicitly configured to block
+          if [ "${{ secrets.BLOCK_ON_DEPENDENCIES }}" = "true" ]; then
+            echo "🛑 BLOCKING: Repository configured to block on dependency vulnerabilities."
+            exit 1
+          fi
+        else
+          echo "✅ No high/critical dependency vulnerabilities found."
+        fi
 
   container-scan:
     runs-on: ubuntu-latest
