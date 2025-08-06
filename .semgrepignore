@@ -1,0 +1,13 @@
+# Semgrep ignore file for false positives
+# Format: path/to/file:line_number or path/to/file
+
+# False positive: SQL injection - properly parameterized query with validated fields
+backend/src/core/storage.py:694
+
+# False positive: setTimeout is not eval() vulnerability
+frontend/src/lib/api.ts:45
+frontend/src/lib/api.ts:139
+frontend/src/lib/api.ts:201
+
+# False positive: Dynamic import in system check script (controlled package list)
+backend/scripts/check_system.py:120
