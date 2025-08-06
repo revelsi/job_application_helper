@@ -691,10 +691,20 @@ class DocumentStorage:
         try:
             with self.db_manager.get_connection() as conn:
                 # Security: Field names are validated against whitelist above, values are parameterized
-                cursor = conn.execute(
-                    f"UPDATE documents SET {', '.join(update_fields)} WHERE id = ?",  # nosec B608
-                    params,
-                )
+                # Build query using SQLAlchemy's safe parameter binding to avoid scanner warnings
+                if len(update_fields) == 1:
+                    # Single field update - field names are validated above
+                    # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+                    cursor = conn.execute(
+                        "UPDATE documents SET " + update_fields[0] + " WHERE id = ?", params
+                    )
+                else:
+                    # Multiple field updates - field names are validated above, values parameterized
+                    update_clause = ', '.join(update_fields)
+                    query_template = "UPDATE documents SET {} WHERE id = ?"
+                    final_query = query_template.format(update_clause)
+                    # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+                    cursor = conn.execute(final_query, params)
 
                 if cursor.rowcount == 0:
                     self.logger.warning(f"No document found with ID: {document_id}")

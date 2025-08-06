@@ -79,6 +79,7 @@ export const ApiKeysSetup: React.FC<ApiKeysSetupProps> = ({ isOpen, onClose, onS
       // Only trigger if we just became configured (transition from false to true)
       if (isCurrentlyConfigured && !wasConfigured) {
         // Small delay to ensure the status is fully updated
+        // nosemgrep: unsafe-eval
         const timer = setTimeout(() => {
           onSuccess();
         }, 1000);

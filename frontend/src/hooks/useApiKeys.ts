@@ -74,6 +74,7 @@ export const useApiKeys = () => {
       }
 
       // Small delay to ensure backend has processed the change
+      // nosemgrep: unsafe-eval
       await new Promise(resolve => setTimeout(resolve, 100));
       
       // Refresh status after setting key
@@ -98,6 +99,7 @@ export const useApiKeys = () => {
       }
 
       // Small delay to ensure backend has processed the change
+      // nosemgrep: unsafe-eval
       await new Promise(resolve => setTimeout(resolve, 100));
       
       // Refresh status after removing key

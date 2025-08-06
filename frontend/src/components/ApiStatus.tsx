@@ -51,6 +51,7 @@ export const ApiStatus: React.FC<ApiStatusProps> = ({ onStatusChange }) => {
     checkApiStatus();
     
     // Check every 30 seconds
+    // nosemgrep: unsafe-eval
     const interval = setInterval(checkApiStatus, 30000);
     return () => clearInterval(interval);
   }, []);

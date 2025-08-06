@@ -1,13 +1,12 @@
 # Semgrep ignore file for false positives
-# Format: path/to/file:line_number or path/to/file
+# This file follows .gitignore syntax to exclude files/folders from scans
+# For specific code blocks, use inline "nosemgrep" comments instead
+# 
+# Files in this ignore list are completely excluded from security scans.
+# Use this sparingly - prefer inline nosemgrep comments for specific false positives.
 
-# False positive: SQL injection - properly parameterized query with validated fields
-backend/src/core/storage.py:694
-
-# False positive: setTimeout is not eval() vulnerability
-frontend/src/lib/api.ts:45
-frontend/src/lib/api.ts:139
-frontend/src/lib/api.ts:201
-
-# False positive: Dynamic import in system check script (controlled package list)
-backend/scripts/check_system.py:120
+# =============================================================================
+# SYSTEM SCRIPTS WITH CONTROLLED DYNAMIC IMPORTS
+# =============================================================================
+# System check script with controlled package list - safe dynamic imports
+backend/scripts/check_system.py

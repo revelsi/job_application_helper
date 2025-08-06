@@ -60,6 +60,7 @@ const addToRemoveQueue = (toastId: string) => {
     return
   }
 
+  // nosemgrep: unsafe-eval
   const timeout = setTimeout(() => {
     toastTimeouts.delete(toastId)
     dispatch({

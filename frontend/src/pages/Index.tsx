@@ -142,6 +142,7 @@ const Index = () => {
 
       // Also refresh from backend after a longer delay to ensure consistency
       // This serves as a backup and handles any edge cases
+      // nosemgrep: unsafe-eval
       setTimeout(async () => {
         await fetchExistingDocuments();
       }, 2000);
@@ -234,11 +235,13 @@ const Index = () => {
     setShowSuccess(true);
     
     // Show success message briefly, then show initialization
+    // nosemgrep: unsafe-eval
     setTimeout(() => {
       setShowSuccess(false);
       setIsInitializing(true);
       
       // Show initialization message for a moment before switching tabs
+      // nosemgrep: unsafe-eval
       setTimeout(() => {
         setIsInitializing(false);
         setActiveTab('documents');
