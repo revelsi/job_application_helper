@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Optional
 
 from cryptography.fernet import Fernet
-from pydantic import Field, validator
+from pydantic import Field, validator, ConfigDict
 from pydantic_settings import BaseSettings
 
 
@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     openai_api_key: Optional[str] = Field(default=None, env="OPENAI_API_KEY")
     anthropic_api_key: Optional[str] = Field(default=None, env="ANTHROPIC_API_KEY")
     mistral_api_key: Optional[str] = Field(default=None, env="MISTRAL_API_KEY")
+    default_llm_provider: Optional[str] = Field(default=None, env="DEFAULT_LLM_PROVIDER")
 
     # External APIs
     linkedin_api_key: Optional[str] = Field(default=None, env="LINKEDIN_API_KEY")
@@ -99,9 +100,11 @@ class Settings(BaseSettings):
             raise ValueError(f"Log level must be one of: {valid_levels}")
         return v.upper()
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    model_config = ConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="allow"  # Allow extra fields like default_llm_provider
+    )
 
 
 def get_settings() -> Settings:
@@ -270,5 +273,5 @@ def validate_required_settings(settings: Settings) -> None:
         )
 
 
-# Global settings instance
-settings = get_settings()
+# Note: Settings are instantiated on-demand via get_settings() 
+# to avoid import-time configuration errors

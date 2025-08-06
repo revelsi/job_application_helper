@@ -322,22 +322,41 @@ def get_default_provider() -> LLMProvider:
             "- Set environment variables (OPENAI_API_KEY, MISTRAL_API_KEY, etc.)"
         )
 
-    # Use the first available provider (no preferences - user choice)
+    # Check if user has specified a default provider preference
+    preferred_provider = None
+    if settings.default_llm_provider:
+        provider_name = settings.default_llm_provider.lower()
+        if provider_name == "openai":
+            preferred_provider = ProviderType.OPENAI
+        elif provider_name == "mistral":
+            preferred_provider = ProviderType.MISTRAL
+        logger.info(f"🎯 User prefers provider: {provider_name}")
+    
+    # Try preferred provider first if specified and available
+    provider_order = []
+    if preferred_provider and available.get(preferred_provider, False):
+        provider_order.append(preferred_provider)
+        logger.info(f"🔍 Trying preferred provider: {preferred_provider.value}")
+    
+    # Add remaining providers as fallbacks
     for provider_type in [ProviderType.OPENAI, ProviderType.MISTRAL]:
-        if available.get(provider_type, False):
-            logger.info(f"🔍 Using available provider: {provider_type.value}")
-            try:
-                provider = get_llm_provider(provider_type)
-                logger.info(f"✅ Successfully initialized {provider_type.value}")
-                
-                # Cache the provider for future use
-                _provider_cache = provider
-                logger.debug("💾 Cached default provider for future requests")
-                
-                return provider
-            except Exception as e:
-                logger.warning(f"❌ Failed to initialize {provider_type.value}: {e}")
-                continue
+        if provider_type not in provider_order and available.get(provider_type, False):
+            provider_order.append(provider_type)
+    
+    # Try providers in order
+    for provider_type in provider_order:
+        try:
+            provider = get_llm_provider(provider_type)
+            logger.info(f"✅ Successfully initialized {provider_type.value}")
+            
+            # Cache the provider for future use
+            _provider_cache = provider
+            logger.debug("💾 Cached default provider for future requests")
+            
+            return provider
+        except Exception as e:
+            logger.warning(f"❌ Failed to initialize {provider_type.value}: {e}")
+            continue
 
     # No providers available
     logger.error("❌ No LLM providers are available")

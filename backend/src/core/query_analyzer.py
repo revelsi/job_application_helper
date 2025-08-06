@@ -171,18 +171,18 @@ TASK: Analyze the user query to determine intent, document relevance, and provid
 Respond with ONLY a valid JSON object:
 
 ```json
-{
+{{
     "intent_type": "cover_letter",
-    "intent_parameters": {
+    "intent_parameters": {{
         "company_name": "if mentioned",
         "role_title": "if mentioned",
         "specific_focus": "any specific aspects mentioned"
-    },
-    "document_weights": {
+    }},
+    "document_weights": {{
         "candidate": 0.6,
         "job": 0.3,
         "company": 0.1
-    },
+    }},
     "is_multi_query": false,
     "expanded_queries": [
         "What specific achievements should I highlight for this role?",
@@ -190,7 +190,7 @@ Respond with ONLY a valid JSON object:
     ],
     "confidence": 0.9,
     "reasoning": "Brief explanation of the analysis and weighting strategy"
-}
+}}
 ```
 
 **WEIGHTING GUIDELINES:**
@@ -201,13 +201,23 @@ Respond with ONLY a valid JSON object:
 
 Analysis:"""
 
-        # Use LLM for analysis
+        # Use LLM for analysis - choose appropriate small/fast model based on provider
+        # Determine the best small model for the current provider
+        small_model = None
+        if hasattr(self.llm_provider, 'provider_type'):
+            if self.llm_provider.provider_type.value == "openai":
+                small_model = "gpt-4.1-nano"  # OpenAI's small/fast model
+            elif self.llm_provider.provider_type.value == "mistral":
+                small_model = "mistral-small-2506"  # Mistral's lightweight model for classification
+            # For other providers, let them use their default model
+        
         request = GenerationRequest(
             prompt=analysis_prompt,
             content_type=ContentType.GENERAL_RESPONSE,
             context={"task": "query_analysis"},
             max_tokens=500,
             temperature=0.2,  # Low temperature for consistent analysis
+            model=small_model,  # Use provider-appropriate small/fast model
         )
         
         response = self.llm_provider.generate_content(request)

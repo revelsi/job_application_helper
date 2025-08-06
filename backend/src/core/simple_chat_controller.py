@@ -37,6 +37,7 @@ from src.core.llm_providers.base import (
 from src.core.llm_providers.factory import get_default_provider
 from src.core.memory_manager import MemoryManager, SessionStatus
 from src.core.prompts import PromptManager, PromptType
+from src.core.query_analyzer import QueryAnalyzer
 from src.core.simple_document_service import get_simple_document_service
 from src.utils.config import get_settings
 from src.utils.logging import get_logger
@@ -80,11 +81,13 @@ class SimpleChatController:
         self.document_service = get_simple_document_service()
         self.prompt_manager = PromptManager()
         self.prompt_sanitizer = get_prompt_sanitizer()
+        self.query_analyzer = QueryAnalyzer(llm_provider=self.llm_provider)
         
         # Component availability flags
         self.llm_available = self.llm_provider is not None
         self.memory_available = self.memory_manager is not None
         self.documents_available = self.document_service is not None
+        self.query_analyzer_available = self.query_analyzer.llm_available
         
         # Current session tracking
         self.current_session_id: Optional[str] = None
@@ -93,7 +96,8 @@ class SimpleChatController:
             f"Simplified chat controller initialized "
             f"(LLM: {'✅' if self.llm_available else '❌'}, "
             f"Memory: {'✅' if self.memory_available else '❌'}, "
-            f"Documents: {'✅' if self.documents_available else '❌'})"
+            f"Documents: {'✅' if self.documents_available else '❌'}, "
+            f"QueryAnalyzer: {'✅' if self.query_analyzer_available else '❌'})"
         )
     
     def process_message(
@@ -144,11 +148,24 @@ class SimpleChatController:
                 
                 self.memory_manager.add_user_message(session_id, sanitized_message.strip())
             
-            # Detect content type from message
-            content_type = self._detect_content_type(sanitized_message)
+            # Analyze query for intent and document weighting (if available)
+            query_analysis = None
+            if self.query_analyzer_available:
+                try:
+                    query_analysis = self.query_analyzer.analyze_query(
+                        sanitized_message,
+                        conversation_history=conversation_history
+                    )
+                    self.logger.debug(f"Query analysis: intent={query_analysis.intent_type}, confidence={query_analysis.confidence}")
+                except Exception as e:
+                    self.logger.warning(f"Query analysis failed: {e}")
+                    query_analysis = None
             
-            # Get document context
-            context = self._get_document_context(sanitized_message)
+            # Detect content type (enhanced with query analysis)
+            content_type = self._detect_content_type(sanitized_message, query_analysis)
+            
+            # Get document context (enhanced with document weighting)
+            context = self._get_document_context(sanitized_message, query_analysis)
             
             # Get conversation history from memory manager if available
             conversation_context = None
@@ -270,11 +287,24 @@ class SimpleChatController:
                 
                 self.memory_manager.add_user_message(session_id, sanitized_message.strip())
             
-            # Detect content type from message
-            content_type = self._detect_content_type(sanitized_message)
+            # Analyze query for intent and document weighting (if available)
+            query_analysis = None
+            if self.query_analyzer_available:
+                try:
+                    query_analysis = self.query_analyzer.analyze_query(
+                        sanitized_message,
+                        conversation_history=conversation_history
+                    )
+                    self.logger.debug(f"Query analysis: intent={query_analysis.intent_type}, confidence={query_analysis.confidence}")
+                except Exception as e:
+                    self.logger.warning(f"Query analysis failed: {e}")
+                    query_analysis = None
             
-            # Get document context
-            context = self._get_document_context(sanitized_message)
+            # Detect content type (enhanced with query analysis)
+            content_type = self._detect_content_type(sanitized_message, query_analysis)
+            
+            # Get document context (enhanced with document weighting)
+            context = self._get_document_context(sanitized_message, query_analysis)
             
             # Get conversation history from memory manager if available
             conversation_context = None
@@ -318,16 +348,33 @@ class SimpleChatController:
             self.logger.error(error_msg)
             yield f"Error: {error_msg}\n"
     
-    def _detect_content_type(self, message: str) -> ContentType:
+    def _detect_content_type(self, message: str, query_analysis=None) -> ContentType:
         """
-        Detect the content type from the user message.
+        Detect the content type from the user message, enhanced with query analysis.
         
         Args:
             message: User message
+            query_analysis: Optional QueryAnalysis from QueryAnalyzer
             
         Returns:
             ContentType enum value
         """
+        # Use QueryAnalyzer result if available and confident
+        if query_analysis and query_analysis.confidence > 0.7:
+            intent_to_content_map = {
+                "cover_letter": ContentType.COVER_LETTER,
+                "behavioral_interview": ContentType.INTERVIEW_ANSWER,
+                "interview_answer": ContentType.INTERVIEW_ANSWER,
+                "content_refinement": ContentType.CONTENT_REFINEMENT,
+                "ats_optimizer": ContentType.CONTENT_REFINEMENT,
+                "achievement_quantifier": ContentType.CONTENT_REFINEMENT,
+                "general": ContentType.GENERAL_RESPONSE,
+            }
+            
+            content_type = intent_to_content_map.get(query_analysis.intent_type)
+            if content_type:
+                self.logger.debug(f"Using QueryAnalyzer content type: {content_type} (confidence: {query_analysis.confidence})")
+                return content_type
         message_lower = message.lower()
         
         # Cover letter indicators
@@ -371,12 +418,13 @@ class SimpleChatController:
         else:
             return ContentType.GENERAL_RESPONSE
     
-    def _get_document_context(self, message: str) -> Dict[str, Any]:
+    def _get_document_context(self, message: str, query_analysis=None) -> Dict[str, Any]:
         """
-        Get relevant document context for the message.
+        Get relevant document context for the message, enhanced with document weighting.
         
         Args:
             message: User message
+            query_analysis: Optional QueryAnalysis with document weights
             
         Returns:
             Dictionary with document context
@@ -389,13 +437,30 @@ class SimpleChatController:
                 "document_counts": {},
             }
         
-        # Get context from document service with larger limits
+        # Apply dynamic document weighting if query analysis is available
+        if query_analysis and query_analysis.document_weights:
+            weights = query_analysis.document_weights
+            base_length = getattr(self.settings, "max_context_length", 100000)
+            
+            # Calculate dynamic limits based on document weights
+            max_candidate_doc_length = int(base_length * weights.get("candidate", 0.4))
+            max_job_doc_length = int(base_length * weights.get("job", 0.3))
+            max_company_doc_length = int(base_length * weights.get("company", 0.3))
+            
+            self.logger.debug(f"Using dynamic document limits: candidate={max_candidate_doc_length}, job={max_job_doc_length}, company={max_company_doc_length}")
+        else:
+            # Use default limits
+            max_candidate_doc_length = getattr(self.settings, "max_candidate_doc_length", 50000)
+            max_job_doc_length = getattr(self.settings, "max_job_doc_length", 30000)
+            max_company_doc_length = getattr(self.settings, "max_company_doc_length", 20000)
+        
+        # Get context from document service with calculated limits
         context = self.document_service.get_relevant_context(
             query=message,
             max_context_length=getattr(self.settings, "max_context_length", 100000),
-            max_candidate_doc_length=getattr(self.settings, "max_candidate_doc_length", 50000),
-            max_job_doc_length=getattr(self.settings, "max_job_doc_length", 30000), 
-            max_company_doc_length=getattr(self.settings, "max_company_doc_length", 20000),
+            max_candidate_doc_length=max_candidate_doc_length,
+            max_job_doc_length=max_job_doc_length, 
+            max_company_doc_length=max_company_doc_length,
         )
         
         return context

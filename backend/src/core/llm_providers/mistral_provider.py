@@ -83,7 +83,8 @@ class MistralProvider(LLMProvider):
             cost_per_1k_tokens=0.0002,  # Estimated cost per 1k tokens
             models=[
                 "magistral-small-2506",
-                "magistral-medium-2506",
+                "magistral-medium-2506", 
+                "mistral-small-2506",  # Lightweight model for classification tasks
             ],
         )
 
