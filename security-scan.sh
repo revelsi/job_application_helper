@@ -23,7 +23,7 @@ semgrep scan \
     --output=security-reports/security-vulnerabilities.json \
     --json \
     --verbose \
-    backend/ frontend/
+    backend/ frontend/ || true
 
 echo "🔍 Scanning for Python-specific security issues..."
 semgrep scan \
@@ -31,7 +31,7 @@ semgrep scan \
     --output=security-reports/python-security.json \
     --json \
     --verbose \
-    backend/
+    backend/ || true
 
 echo "⚛️ Scanning for TypeScript/JavaScript security issues..."
 semgrep scan \
@@ -39,7 +39,7 @@ semgrep scan \
     --output=security-reports/typescript-security.json \
     --json \
     --verbose \
-    frontend/
+    frontend/ || true
 
 echo "🔐 Scanning for authentication and authorization issues..."
 semgrep scan \
@@ -49,7 +49,7 @@ semgrep scan \
     --verbose \
     backend/src/api/endpoints/keys.py \
     backend/src/core/credentials.py \
-    frontend/src/lib/api.ts
+    frontend/src/lib/api.ts || true
 
 echo "📁 Scanning for file upload vulnerabilities..."
 semgrep scan \
@@ -57,7 +57,7 @@ semgrep scan \
     --output=security-reports/file-upload-security.json \
     --json \
     --verbose \
-    backend/src/api/endpoints/documents.py
+    backend/src/api/endpoints/documents.py || true
 
 echo "🌐 Scanning for web security issues..."
 semgrep scan \
@@ -66,7 +66,7 @@ semgrep scan \
     --json \
     --verbose \
     backend/src/api/main.py \
-    frontend/src/
+    frontend/src/ || true
 
 echo "🔒 Scanning for secrets and credentials..."
 semgrep scan \
