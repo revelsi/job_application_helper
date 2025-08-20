@@ -27,13 +27,12 @@ This module provides high-level document management operations including:
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
+from src.core.simple_document_service import get_simple_document_service
 from src.core.storage import (
     DocumentType,
-    StorageError,
     StorageSystem,
     get_storage_system,
 )
-from src.core.simple_document_service import get_simple_document_service
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -121,14 +120,22 @@ class DocumentManager:
                             )
 
                     if type_count > 0:
-                        details.append(f"Cleared {type_count} {doc_type.value} documents")
+                        details.append(
+                            f"Cleared {type_count} {doc_type.value} documents"
+                        )
 
                 except Exception as e:
-                    self.logger.warning(f"Failed to clear {doc_type.value} documents: {e}")
-                    details.append(f"Warning: Could not clear {doc_type.value} documents")
+                    self.logger.warning(
+                        f"Failed to clear {doc_type.value} documents: {e}"
+                    )
+                    details.append(
+                        f"Warning: Could not clear {doc_type.value} documents"
+                    )
                     raise
 
-            success_message = f"Successfully cleared {cleared_count} job-specific documents"
+            success_message = (
+                f"Successfully cleared {cleared_count} job-specific documents"
+            )
             self.logger.info(success_message)
 
             return DocumentOperationResult(
@@ -139,7 +146,7 @@ class DocumentManager:
             )
 
         except Exception as e:
-            error_message = f"Failed to clear job documents: {str(e)}"
+            error_message = f"Failed to clear job documents: {e!s}"
             self.logger.error(error_message)
             return DocumentOperationResult(
                 success=False,
@@ -198,13 +205,21 @@ class DocumentManager:
                             )
 
                     if type_count > 0:
-                        details.append(f"Cleared {type_count} {doc_type.value} documents")
+                        details.append(
+                            f"Cleared {type_count} {doc_type.value} documents"
+                        )
 
                 except Exception as e:
-                    self.logger.warning(f"Failed to clear {doc_type.value} documents: {e}")
-                    details.append(f"Warning: Could not clear {doc_type.value} documents")
+                    self.logger.warning(
+                        f"Failed to clear {doc_type.value} documents: {e}"
+                    )
+                    details.append(
+                        f"Warning: Could not clear {doc_type.value} documents"
+                    )
 
-            success_message = f"Successfully cleared {cleared_count} candidate documents"
+            success_message = (
+                f"Successfully cleared {cleared_count} candidate documents"
+            )
             self.logger.info(success_message)
 
             return DocumentOperationResult(
@@ -215,7 +230,7 @@ class DocumentManager:
             )
 
         except Exception as e:
-            error_message = f"Failed to clear candidate documents: {str(e)}"
+            error_message = f"Failed to clear candidate documents: {e!s}"
             self.logger.error(error_message)
             return DocumentOperationResult(
                 success=False,
@@ -262,7 +277,7 @@ class DocumentManager:
             )
 
         except Exception as e:
-            error_message = f"Failed to clear all documents: {str(e)}"
+            error_message = f"Failed to clear all documents: {e!s}"
             self.logger.error(error_message)
             return DocumentOperationResult(
                 success=False,
@@ -353,7 +368,7 @@ class DocumentManager:
             )
 
         except Exception as e:
-            error_message = f"Failed to delete document {document_id}: {str(e)}"
+            error_message = f"Failed to delete document {document_id}: {e!s}"
             self.logger.error(error_message)
             return DocumentOperationResult(
                 success=False,

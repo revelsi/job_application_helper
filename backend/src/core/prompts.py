@@ -25,11 +25,11 @@ This module centralizes all LLM prompts and templates, making them easy to:
 - Implement research-backed best practices for job applications
 """
 
-import json
 from dataclasses import dataclass
 from enum import Enum
+import json
 from pathlib import Path
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, List, Optional
 
 from src.utils.config import get_settings
 from src.utils.logging import get_logger
@@ -598,7 +598,7 @@ INTERACTION STYLE:
             return {}
 
         try:
-            with open(self.custom_prompts_path, "r", encoding="utf-8") as f:
+            with open(self.custom_prompts_path, encoding="utf-8") as f:
                 data = json.load(f)
 
             custom_prompts = {}
@@ -710,36 +710,32 @@ INTERACTION STYLE:
         user_query: str,
         context: str = "",
         conversation_history: Optional[List] = None,
-        **kwargs
+        **kwargs,
     ) -> str:
         """
         Build a complete prompt combining system and user prompts.
-        
+
         This method provides backward compatibility with the old chat controller.
-        
+
         Args:
             prompt_type: Type of prompt to build
             user_query: User's query/message
             context: Document context
             conversation_history: Previous conversation messages
             **kwargs: Additional variables for prompt formatting
-            
+
         Returns:
             Complete formatted prompt
         """
         # Get system prompt
         system_prompt = self.build_system_prompt(prompt_type)
-        
+
         # Prepare variables for user prompt
-        variables = {
-            "user_query": user_query,
-            "context": context,
-            **kwargs
-        }
-        
+        variables = {"user_query": user_query, "context": context, **kwargs}
+
         # Build user prompt
         user_prompt = self.build_user_prompt(prompt_type, variables)
-        
+
         # Combine system and user prompts
         if context:
             full_prompt = f"""{system_prompt}
@@ -760,7 +756,7 @@ USER REQUEST: {user_query}
 IMPORTANT: You don't have access to any specific documents about this user's background, experience, or job details. Please provide general guidance and suggest that the user upload relevant documents (CV, job descriptions, etc.) for more personalized assistance.
 
 Response:"""
-        
+
         return full_prompt
 
     def _get_industry_guidance(self, industry: str) -> Optional[str]:
@@ -861,7 +857,7 @@ Response:"""
         try:
             # Load existing custom prompts
             if self.custom_prompts_path.exists():
-                with open(self.custom_prompts_path, "r", encoding="utf-8") as f:
+                with open(self.custom_prompts_path, encoding="utf-8") as f:
                     data = json.load(f)
             else:
                 data = {}

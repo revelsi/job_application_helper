@@ -20,12 +20,13 @@ Base LLM Provider Abstract Class.
 Defines the common interface that all LLM providers must implement.
 """
 
-import time
 from abc import ABC, abstractmethod
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Any, AsyncGenerator, Dict, List, Optional
+import time
+from typing import Any, Dict, List, Optional
 
 from src.core.prompts import PromptType, get_prompt_manager
 from src.utils.logging import get_logger
@@ -279,7 +280,7 @@ class LLMProvider(ABC):
 
         except Exception as e:
             generation_time = time.time() - start_time
-            error_msg = f"Content generation failed: {str(e)}"
+            error_msg = f"Content generation failed: {e!s}"
             self.logger.error(error_msg)
 
             return GenerationResponse(

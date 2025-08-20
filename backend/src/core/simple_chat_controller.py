@@ -24,19 +24,19 @@ This controller provides chat functionality without the complexity of RAG:
 - Support for different content types (cover letters, interview answers, etc.)
 """
 
-import time
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass
-from typing import Any, AsyncGenerator, Dict, List, Optional
+import time
+from typing import Any, Dict, List, Optional
 
 from src.core.llm_providers.base import (
     ContentType,
     GenerationRequest,
-    GenerationResponse,
     LLMProvider,
 )
 from src.core.llm_providers.factory import get_default_provider
 from src.core.memory_manager import MemoryManager, SessionStatus
-from src.core.prompts import PromptManager, PromptType
+from src.core.prompts import PromptManager
 from src.core.query_analyzer import QueryAnalyzer
 from src.core.simple_document_service import get_simple_document_service
 from src.utils.config import get_settings
@@ -47,19 +47,19 @@ from src.utils.security import get_prompt_sanitizer
 @dataclass
 class SimpleChatResponse:
     """Response from simplified chat processing."""
-    
+
     content: str
     success: bool
     error: Optional[str] = None
     metadata: Dict[str, Any] = None
-    
+
 
 class SimpleChatController:
     """
     Simplified chat controller that provides document-aware responses
     without complex RAG functionality.
     """
-    
+
     def __init__(
         self,
         llm_provider: Optional[LLMProvider] = None,
@@ -67,14 +67,14 @@ class SimpleChatController:
     ):
         """
         Initialize the simplified chat controller.
-        
+
         Args:
             llm_provider: LLM provider for response generation
             memory_manager: Memory manager for conversation history
         """
         self.settings = get_settings()
         self.logger = get_logger(f"{__name__}.SimpleChatController")
-        
+
         # Core components
         self.llm_provider = llm_provider or get_default_provider()
         self.memory_manager = memory_manager or MemoryManager()
@@ -82,16 +82,16 @@ class SimpleChatController:
         self.prompt_manager = PromptManager()
         self.prompt_sanitizer = get_prompt_sanitizer()
         self.query_analyzer = QueryAnalyzer(llm_provider=self.llm_provider)
-        
+
         # Component availability flags
         self.llm_available = self.llm_provider is not None
         self.memory_available = self.memory_manager is not None
         self.documents_available = self.document_service is not None
         self.query_analyzer_available = self.query_analyzer.llm_available
-        
+
         # Current session tracking
         self.current_session_id: Optional[str] = None
-        
+
         self.logger.info(
             f"Simplified chat controller initialized "
             f"(LLM: {'✅' if self.llm_available else '❌'}, "
@@ -99,7 +99,7 @@ class SimpleChatController:
             f"Documents: {'✅' if self.documents_available else '❌'}, "
             f"QueryAnalyzer: {'✅' if self.query_analyzer_available else '❌'})"
         )
-    
+
     def process_message(
         self,
         message: str,
@@ -108,65 +108,70 @@ class SimpleChatController:
     ) -> SimpleChatResponse:
         """
         Process a chat message and generate a response.
-        
+
         Args:
             message: User message
             conversation_history: Recent conversation history
             session_id: Session ID for memory management
-            
+
         Returns:
             SimpleChatResponse with generated content
         """
         start_time = time.time()
-        
+
         try:
             # Sanitize user input
             sanitized_message = self.prompt_sanitizer.sanitize_prompt(message)
             if sanitized_message != message:
                 self.logger.warning("User message was sanitized for security")
-            
+
             # Setup session if memory is available
             if self.memory_available and session_id:
                 self.current_session_id = session_id
-                
+
                 # Ensure session exists - create it if it doesn't
-                existing_session = self.memory_manager.session_manager.get_session(session_id)
+                existing_session = self.memory_manager.session_manager.get_session(
+                    session_id
+                )
                 if not existing_session:
                     self.logger.info(f"Creating new session: {session_id}")
                     # Create session with specific ID
                     new_session = self.memory_manager.session_manager.create_session(
                         title=f"Chat Session {session_id}",
-                        metadata={"created_by": "chat_controller"}
+                        metadata={"created_by": "chat_controller"},
                     )
                     # Update the session to have our desired ID
                     with self.memory_manager.db.get_connection() as conn:
                         conn.execute(
                             "UPDATE sessions SET session_id = ? WHERE id = ?",
-                            (session_id, new_session.id)
+                            (session_id, new_session.id),
                         )
                         conn.commit()
-                
-                self.memory_manager.add_user_message(session_id, sanitized_message.strip())
-            
+
+                self.memory_manager.add_user_message(
+                    session_id, sanitized_message.strip()
+                )
+
             # Analyze query for intent and document weighting (if available)
             query_analysis = None
             if self.query_analyzer_available:
                 try:
                     query_analysis = self.query_analyzer.analyze_query(
-                        sanitized_message,
-                        conversation_history=conversation_history
+                        sanitized_message, conversation_history=conversation_history
                     )
-                    self.logger.debug(f"Query analysis: intent={query_analysis.intent_type}, confidence={query_analysis.confidence}")
+                    self.logger.debug(
+                        f"Query analysis: intent={query_analysis.intent_type}, confidence={query_analysis.confidence}"
+                    )
                 except Exception as e:
                     self.logger.warning(f"Query analysis failed: {e}")
                     query_analysis = None
-            
+
             # Detect content type (enhanced with query analysis)
             content_type = self._detect_content_type(sanitized_message, query_analysis)
-            
+
             # Get document context (enhanced with document weighting)
             context = self._get_document_context(sanitized_message, query_analysis)
-            
+
             # Get conversation history from memory manager if available
             conversation_context = None
             if self.memory_available and self.current_session_id:
@@ -174,22 +179,28 @@ class SimpleChatController:
                 conversation_context = self.memory_manager.get_conversation_context(
                     self.current_session_id
                 )
-                self.logger.debug(f"Retrieved {len(conversation_context)} conversation messages from memory")
-            
+                self.logger.debug(
+                    f"Retrieved {len(conversation_context)} conversation messages from memory"
+                )
+
             # Build prompt with context and conversation history
-            prompt = self._build_prompt(sanitized_message, context, content_type, conversation_context)
-            
+            prompt = self._build_prompt(
+                sanitized_message, context, content_type, conversation_context
+            )
+
             # Generate response
             generation_request = GenerationRequest(
                 prompt=prompt,
                 content_type=content_type,
                 context=context,
-                max_tokens=getattr(self.settings, "chat_max_tokens", 16000),  # Updated default for reasoning models
+                max_tokens=getattr(
+                    self.settings, "chat_max_tokens", 16000
+                ),  # Updated default for reasoning models
                 temperature=0.7,
             )
-            
+
             llm_response = self.llm_provider.generate_content(generation_request)
-            
+
             # Process response
             if llm_response.success:
                 # Add response to memory
@@ -200,12 +211,12 @@ class SimpleChatController:
                         tokens_used=llm_response.tokens_used,
                         processing_time=time.time() - start_time,
                     )
-                
+
                 # Add source information if documents were used
                 enhanced_content = self._enhance_response_with_sources(
                     llm_response.content, context
                 )
-                
+
                 return SimpleChatResponse(
                     content=enhanced_content,
                     success=True,
@@ -215,23 +226,24 @@ class SimpleChatController:
                         "processing_time": time.time() - start_time,
                         "has_document_context": context.get("has_context", False),
                         "document_counts": context.get("document_counts", {}),
-                        "conversation_messages": len(conversation_context) if conversation_context else 0,
+                        "conversation_messages": len(conversation_context)
+                        if conversation_context
+                        else 0,
                     },
                 )
-            else:
-                return SimpleChatResponse(
-                    content="I apologize, but I encountered an error generating a response.",
-                    success=False,
-                    error=llm_response.error,
-                    metadata={
-                        "processing_time": time.time() - start_time,
-                    },
-                )
-        
+            return SimpleChatResponse(
+                content="I apologize, but I encountered an error generating a response.",
+                success=False,
+                error=llm_response.error,
+                metadata={
+                    "processing_time": time.time() - start_time,
+                },
+            )
+
         except Exception as e:
-            error_msg = f"Chat processing failed: {str(e)}"
+            error_msg = f"Chat processing failed: {e!s}"
             self.logger.error(error_msg)
-            
+
             return SimpleChatResponse(
                 content="I apologize, but I encountered an error processing your request.",
                 success=False,
@@ -240,7 +252,7 @@ class SimpleChatController:
                     "processing_time": time.time() - start_time,
                 },
             )
-    
+
     async def process_message_stream(
         self,
         message: str,
@@ -249,12 +261,12 @@ class SimpleChatController:
     ) -> AsyncGenerator[str, None]:
         """
         Process a chat message and generate a streaming response.
-        
+
         Args:
             message: User message
             conversation_history: Recent conversation history
             session_id: Session ID for memory management
-            
+
         Yields:
             Chunks of generated content
         """
@@ -263,49 +275,56 @@ class SimpleChatController:
             sanitized_message = self.prompt_sanitizer.sanitize_prompt(message)
             if sanitized_message != message:
                 self.logger.warning("User message was sanitized for security")
-            
+
             # Setup session if memory is available
             if self.memory_available and session_id:
                 self.current_session_id = session_id
-                
+
                 # Ensure session exists - create it if it doesn't
-                existing_session = self.memory_manager.session_manager.get_session(session_id)
+                existing_session = self.memory_manager.session_manager.get_session(
+                    session_id
+                )
                 if not existing_session:
-                    self.logger.info(f"Creating new session for streaming: {session_id}")
+                    self.logger.info(
+                        f"Creating new session for streaming: {session_id}"
+                    )
                     # Create session with specific ID
                     new_session = self.memory_manager.session_manager.create_session(
                         title=f"Chat Session {session_id}",
-                        metadata={"created_by": "chat_controller"}
+                        metadata={"created_by": "chat_controller"},
                     )
                     # Update the session to have our desired ID
                     with self.memory_manager.db.get_connection() as conn:
                         conn.execute(
                             "UPDATE sessions SET session_id = ? WHERE id = ?",
-                            (session_id, new_session.id)
+                            (session_id, new_session.id),
                         )
                         conn.commit()
-                
-                self.memory_manager.add_user_message(session_id, sanitized_message.strip())
-            
+
+                self.memory_manager.add_user_message(
+                    session_id, sanitized_message.strip()
+                )
+
             # Analyze query for intent and document weighting (if available)
             query_analysis = None
             if self.query_analyzer_available:
                 try:
                     query_analysis = self.query_analyzer.analyze_query(
-                        sanitized_message,
-                        conversation_history=conversation_history
+                        sanitized_message, conversation_history=conversation_history
                     )
-                    self.logger.debug(f"Query analysis: intent={query_analysis.intent_type}, confidence={query_analysis.confidence}")
+                    self.logger.debug(
+                        f"Query analysis: intent={query_analysis.intent_type}, confidence={query_analysis.confidence}"
+                    )
                 except Exception as e:
                     self.logger.warning(f"Query analysis failed: {e}")
                     query_analysis = None
-            
+
             # Detect content type (enhanced with query analysis)
             content_type = self._detect_content_type(sanitized_message, query_analysis)
-            
+
             # Get document context (enhanced with document weighting)
             context = self._get_document_context(sanitized_message, query_analysis)
-            
+
             # Get conversation history from memory manager if available
             conversation_context = None
             if self.memory_available and self.current_session_id:
@@ -313,27 +332,35 @@ class SimpleChatController:
                 conversation_context = self.memory_manager.get_conversation_context(
                     self.current_session_id
                 )
-                self.logger.debug(f"Retrieved {len(conversation_context)} conversation messages from memory for streaming")
-            
+                self.logger.debug(
+                    f"Retrieved {len(conversation_context)} conversation messages from memory for streaming"
+                )
+
             # Build prompt with context and conversation history
-            prompt = self._build_prompt(sanitized_message, context, content_type, conversation_context)
-            
+            prompt = self._build_prompt(
+                sanitized_message, context, content_type, conversation_context
+            )
+
             # Generate streaming response
             generation_request = GenerationRequest(
                 prompt=prompt,
                 content_type=content_type,
                 context=context,
-                max_tokens=getattr(self.settings, "chat_max_tokens", 16000),  # Updated default for reasoning models
+                max_tokens=getattr(
+                    self.settings, "chat_max_tokens", 16000
+                ),  # Updated default for reasoning models
                 temperature=0.7,
             )
-            
+
             # Accumulate content for memory
             accumulated_content = ""
-            
-            async for chunk in self.llm_provider.generate_content_stream(generation_request):
+
+            async for chunk in self.llm_provider.generate_content_stream(
+                generation_request
+            ):
                 accumulated_content += chunk
                 yield chunk
-            
+
             # Add complete response to memory
             if self.memory_available and self.current_session_id:
                 self.memory_manager.add_assistant_message(
@@ -342,20 +369,20 @@ class SimpleChatController:
                     tokens_used=0,  # We don't have token count for streaming
                     processing_time=0.0,
                 )
-        
+
         except Exception as e:
-            error_msg = f"Chat streaming failed: {str(e)}"
+            error_msg = f"Chat streaming failed: {e!s}"
             self.logger.error(error_msg)
             yield f"Error: {error_msg}\n"
-    
+
     def _detect_content_type(self, message: str, query_analysis=None) -> ContentType:
         """
         Detect the content type from the user message, enhanced with query analysis.
-        
+
         Args:
             message: User message
             query_analysis: Optional QueryAnalysis from QueryAnalyzer
-            
+
         Returns:
             ContentType enum value
         """
@@ -370,13 +397,15 @@ class SimpleChatController:
                 "achievement_quantifier": ContentType.CONTENT_REFINEMENT,
                 "general": ContentType.GENERAL_RESPONSE,
             }
-            
+
             content_type = intent_to_content_map.get(query_analysis.intent_type)
             if content_type:
-                self.logger.debug(f"Using QueryAnalyzer content type: {content_type} (confidence: {query_analysis.confidence})")
+                self.logger.debug(
+                    f"Using QueryAnalyzer content type: {content_type} (confidence: {query_analysis.confidence})"
+                )
                 return content_type
         message_lower = message.lower()
-        
+
         # Cover letter indicators
         cover_letter_keywords = [
             "cover letter",
@@ -385,7 +414,7 @@ class SimpleChatController:
             "generate cover letter",
             "create cover letter",
         ]
-        
+
         # Interview answer indicators
         interview_keywords = [
             "interview",
@@ -396,7 +425,7 @@ class SimpleChatController:
             "star method",
             "why should we hire you",
         ]
-        
+
         # Content refinement indicators
         refinement_keywords = [
             "improve",
@@ -407,25 +436,26 @@ class SimpleChatController:
             "revise",
             "rewrite",
         ]
-        
+
         # Check for specific content types
         if any(keyword in message_lower for keyword in cover_letter_keywords):
             return ContentType.COVER_LETTER
-        elif any(keyword in message_lower for keyword in interview_keywords):
+        if any(keyword in message_lower for keyword in interview_keywords):
             return ContentType.INTERVIEW_ANSWER
-        elif any(keyword in message_lower for keyword in refinement_keywords):
+        if any(keyword in message_lower for keyword in refinement_keywords):
             return ContentType.CONTENT_REFINEMENT
-        else:
-            return ContentType.GENERAL_RESPONSE
-    
-    def _get_document_context(self, message: str, query_analysis=None) -> Dict[str, Any]:
+        return ContentType.GENERAL_RESPONSE
+
+    def _get_document_context(
+        self, message: str, query_analysis=None
+    ) -> Dict[str, Any]:
         """
         Get relevant document context for the message, enhanced with document weighting.
-        
+
         Args:
             message: User message
             query_analysis: Optional QueryAnalysis with document weights
-            
+
         Returns:
             Dictionary with document context
         """
@@ -436,69 +466,77 @@ class SimpleChatController:
                 "source_documents": [],
                 "document_counts": {},
             }
-        
+
         # Apply dynamic document weighting if query analysis is available
         if query_analysis and query_analysis.document_weights:
             weights = query_analysis.document_weights
             base_length = getattr(self.settings, "max_context_length", 100000)
-            
+
             # Calculate dynamic limits based on document weights
             max_candidate_doc_length = int(base_length * weights.get("candidate", 0.4))
             max_job_doc_length = int(base_length * weights.get("job", 0.3))
             max_company_doc_length = int(base_length * weights.get("company", 0.3))
-            
-            self.logger.debug(f"Using dynamic document limits: candidate={max_candidate_doc_length}, job={max_job_doc_length}, company={max_company_doc_length}")
+
+            self.logger.debug(
+                f"Using dynamic document limits: candidate={max_candidate_doc_length}, job={max_job_doc_length}, company={max_company_doc_length}"
+            )
         else:
             # Use default limits
-            max_candidate_doc_length = getattr(self.settings, "max_candidate_doc_length", 50000)
+            max_candidate_doc_length = getattr(
+                self.settings, "max_candidate_doc_length", 50000
+            )
             max_job_doc_length = getattr(self.settings, "max_job_doc_length", 30000)
-            max_company_doc_length = getattr(self.settings, "max_company_doc_length", 20000)
-        
+            max_company_doc_length = getattr(
+                self.settings, "max_company_doc_length", 20000
+            )
+
         # Get context from document service with calculated limits
         context = self.document_service.get_relevant_context(
             query=message,
             max_context_length=getattr(self.settings, "max_context_length", 100000),
             max_candidate_doc_length=max_candidate_doc_length,
-            max_job_doc_length=max_job_doc_length, 
+            max_job_doc_length=max_job_doc_length,
             max_company_doc_length=max_company_doc_length,
         )
-        
+
         return context
-    
+
     def _build_prompt(
-        self, 
-        message: str, 
-        context: Dict[str, Any], 
+        self,
+        message: str,
+        context: Dict[str, Any],
         content_type: ContentType,
-        conversation_context: Optional[List[Dict[str, Any]]] = None
+        conversation_context: Optional[List[Dict[str, Any]]] = None,
     ) -> str:
         """
         Build the prompt for LLM generation.
-        
+
         For Mistral reasoning models, we let Mistral handle the system prompt
         and just provide the user request with context.
-        
+
         Args:
             message: User message
             context: Document context
             content_type: Type of content to generate
             conversation_context: Previous conversation messages for context
-            
+
         Returns:
             Formatted prompt string
         """
         # For Mistral reasoning models, we let Mistral handle the system prompt
         # and just provide a clear user request with context
-        
+
         prompt_parts = []
-        
+
         # Add document context if available
         if context.get("has_context", False):
             context_text = context.get("context_text", "")
             prompt_parts.append(f"DOCUMENT CONTEXT:\n{context_text}")
-        
+
         # Add conversation history if available
-        if conversation_context and len(conversation_context) > 1:  # More than just the current message
+        if (
+            conversation_context and len(conversation_context) > 1
+        ):  # More than just the current message
             # Filter out system messages and format conversation history
             conversation_messages = []
             for msg in conversation_context:
@@ -506,83 +544,87 @@ class SimpleChatController:
                     role = "User" if msg.get("role") == "user" else "Assistant"
                     content = msg.get("content", "")
                     conversation_messages.append(f"{role}: {content}")
-            
+
             if conversation_messages:
                 # Include recent conversation history (last 6 messages to avoid token limits)
                 recent_history = conversation_messages[-6:]
                 history_text = "\n".join(recent_history)
                 prompt_parts.append(f"CONVERSATION HISTORY:\n{history_text}")
-        
+
         # Add current user request
         prompt_parts.append(f"USER REQUEST: {message}")
-        
+
         # Add guidance
         if context.get("has_context", False):
-            prompt_parts.append("Please provide a helpful response based on the document context above. If the context doesn't contain relevant information, please say so and provide general guidance.")
+            prompt_parts.append(
+                "Please provide a helpful response based on the document context above. If the context doesn't contain relevant information, please say so and provide general guidance."
+            )
         else:
-            prompt_parts.append("Note: You don't have access to any specific documents about this user's background, experience, or job details. Please provide general guidance and suggest that the user upload relevant documents (CV, job descriptions, etc.) for more personalized assistance.")
-        
+            prompt_parts.append(
+                "Note: You don't have access to any specific documents about this user's background, experience, or job details. Please provide general guidance and suggest that the user upload relevant documents (CV, job descriptions, etc.) for more personalized assistance."
+            )
+
         return "\n\n".join(prompt_parts)
-    
+
     def _get_cover_letter_prompt(self) -> str:
         """Get prompt for cover letter generation."""
         return """You are a professional career advisor specializing in cover letter writing. Your task is to help create compelling, personalized cover letters that effectively connect a candidate's experience with job requirements."""
-    
+
     def _get_interview_answer_prompt(self) -> str:
         """Get prompt for interview answer generation."""
         return """You are a professional interview coach. Your task is to help candidates prepare strong, structured answers to interview questions using the STAR method (Situation, Task, Action, Result) when appropriate."""
-    
+
     def _get_content_refinement_prompt(self) -> str:
         """Get prompt for content refinement."""
         return """You are a professional writing coach specializing in career-related content. Your task is to help improve, refine, and enhance written content to make it more impactful and professional."""
-    
+
     def _get_general_response_prompt(self) -> str:
         """Get prompt for general responses."""
         return """You are a professional career advisor. Your task is to provide helpful, practical advice and information related to job applications, career development, and professional growth."""
-    
+
     def _enhance_response_with_sources(
-        self, 
-        response: str, 
-        context: Dict[str, Any]
+        self, response: str, context: Dict[str, Any]
     ) -> str:
         """
         Enhance response with source document information.
-        
+
         Args:
             response: Generated response
             context: Document context used
-            
+
         Returns:
             Enhanced response with source information
         """
         if not context.get("has_context", False):
             return response
-        
+
         source_documents = context.get("source_documents", [])
         if not source_documents:
             return response
-        
+
         # Add source information
         if len(source_documents) == 1:
-            source_info = f"\n\n*Based on information from: {source_documents[0]['filename']}*"
+            source_info = (
+                f"\n\n*Based on information from: {source_documents[0]['filename']}*"
+            )
         else:
-            filenames = [doc['filename'] for doc in source_documents]
+            filenames = [doc["filename"] for doc in source_documents]
             unique_filenames = list(set(filenames))
             if len(unique_filenames) <= 3:
                 file_list = ", ".join(unique_filenames)
             else:
                 file_list = f"{', '.join(unique_filenames[:3])}, and {len(unique_filenames) - 3} more"
             source_info = f"\n\n*Based on information from: {file_list}*"
-        
+
         return response + source_info
-    
+
     def _ensure_session(self) -> str:
         """Ensure we have a valid session ID."""
         if not self.memory_available:
             return "no_session"
-        
+
         return self.memory_manager.create_session()
-    
+
     def get_stats(self) -> Dict[str, Any]:
         """Get chat controller statistics."""
         stats = {
@@ -591,18 +633,18 @@ class SimpleChatController:
             "documents_available": self.documents_available,
             "current_session": self.current_session_id,
         }
-        
+
         # Add document stats
         if self.documents_available:
             stats["documents"] = self.document_service.get_stats()
-        
+
         # Add memory stats
         if self.memory_available:
             stats["memory"] = {
                 "total_sessions": len(self.memory_manager.get_active_sessions()),
                 "active_sessions": len(self.memory_manager.get_active_sessions()),
             }
-        
+
         # Add LLM stats
         if self.llm_available:
             stats["llm"] = {
@@ -610,22 +652,22 @@ class SimpleChatController:
                 "available": self.llm_provider.is_available(),
                 "default_model": self.llm_provider.get_default_model(),
             }
-        
+
         return stats
 
     def clear_session(self, session_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Clear the chat session and conversation history.
-        
+
         Args:
             session_id: Session ID to clear. If None, clears current session.
-            
+
         Returns:
             Dictionary with operation result
         """
         try:
             target_session_id = session_id or self.current_session_id
-            
+
             # If no session specified and no current session, still return success
             # (nothing to clear is a valid state)
             if not target_session_id:
@@ -636,66 +678,75 @@ class SimpleChatController:
                     "session_id": None,
                     "messages_deleted": 0,
                 }
-            
+
             # Clear session from memory manager if available
             if self.memory_available:
                 # First check if session exists
-                existing_session = self.memory_manager.session_manager.get_session(target_session_id)
-                
+                existing_session = self.memory_manager.session_manager.get_session(
+                    target_session_id
+                )
+
                 if existing_session:
                     # Delete messages for existing session
-                    deleted_count = self.memory_manager.message_manager.delete_session_messages(target_session_id)
-                    self.memory_manager.session_manager.update_session_status(
-                        target_session_id, 
-                        SessionStatus.COMPLETED
+                    deleted_count = (
+                        self.memory_manager.message_manager.delete_session_messages(
+                            target_session_id
+                        )
                     )
-                    
-                    self.logger.info(f"Cleared existing session {target_session_id} - deleted {deleted_count} messages")
-                    
+                    self.memory_manager.session_manager.update_session_status(
+                        target_session_id, SessionStatus.COMPLETED
+                    )
+
+                    self.logger.info(
+                        f"Cleared existing session {target_session_id} - deleted {deleted_count} messages"
+                    )
+
                     # Reset current session if it was the one being cleared
                     if target_session_id == self.current_session_id:
                         self.current_session_id = None
-                    
+
                     return {
                         "success": True,
                         "message": f"Session cleared successfully. Removed {deleted_count} messages.",
                         "session_id": target_session_id,
                         "messages_deleted": deleted_count,
                     }
-                else:
-                    # Session doesn't exist, but that's fine - nothing to clear
-                    self.logger.info(f"Session {target_session_id} doesn't exist - nothing to clear")
-                    
-                    # Reset current session if it was the one being cleared
-                    if target_session_id == self.current_session_id:
-                        self.current_session_id = None
-                    
-                    return {
-                        "success": True,
-                        "message": "Session cleared (no messages found)",
-                        "session_id": target_session_id,
-                        "messages_deleted": 0,
-                    }
-            else:
-                # If no memory manager, just reset current session
+                # Session doesn't exist, but that's fine - nothing to clear
+                self.logger.info(
+                    f"Session {target_session_id} doesn't exist - nothing to clear"
+                )
+
+                # Reset current session if it was the one being cleared
                 if target_session_id == self.current_session_id:
                     self.current_session_id = None
-                
+
                 return {
                     "success": True,
-                    "message": "Session cleared (no persistent memory)",
+                    "message": "Session cleared (no messages found)",
                     "session_id": target_session_id,
                     "messages_deleted": 0,
                 }
-                
+            # If no memory manager, just reset current session
+            if target_session_id == self.current_session_id:
+                self.current_session_id = None
+
+            return {
+                "success": True,
+                "message": "Session cleared (no persistent memory)",
+                "session_id": target_session_id,
+                "messages_deleted": 0,
+            }
+
         except Exception as e:
-            error_msg = f"Failed to clear session: {str(e)}"
+            error_msg = f"Failed to clear session: {e!s}"
             self.logger.error(error_msg)
-            
+
             return {
                 "success": False,
                 "message": error_msg,
-                "session_id": target_session_id if 'target_session_id' in locals() else None,
+                "session_id": target_session_id
+                if "target_session_id" in locals()
+                else None,
                 "error": str(e),
             }
 
@@ -706,15 +757,15 @@ def create_simple_chat_controller(
 ) -> SimpleChatController:
     """
     Create a simple chat controller instance.
-    
+
     Args:
         llm_provider: Optional LLM provider
         memory_manager: Optional memory manager
-        
+
     Returns:
         SimpleChatController instance
     """
     return SimpleChatController(
         llm_provider=llm_provider,
         memory_manager=memory_manager,
-    ) 
+    )

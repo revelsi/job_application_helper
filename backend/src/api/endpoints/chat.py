@@ -22,9 +22,12 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from src.api.models import ChatRequest, ChatResponse
-from src.core.simple_chat_controller import SimpleChatController, create_simple_chat_controller
 from src.core.llm_providers.factory import get_default_provider
 from src.core.memory_manager import MemoryManager
+from src.core.simple_chat_controller import (
+    SimpleChatController,
+    create_simple_chat_controller,
+)
 from src.utils.logging import get_logger
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -39,13 +42,14 @@ def get_chat_controller() -> SimpleChatController:
     try:
         # Initialize LLM provider
         logger.info("🔧 Initializing LLM provider...")
-        
+
         # Get fresh API key status to ensure we have the latest configuration
         from src.core.llm_providers.factory import get_api_key_manager
+
         key_manager = get_api_key_manager()
         config_status = key_manager.list_configured_providers()
         logger.debug(f"📊 Current provider configuration status: {config_status}")
-        
+
         # Try to get a fresh provider instance
         llm_provider = None
         try:
@@ -84,7 +88,8 @@ def get_chat_controller() -> SimpleChatController:
 
 @router.post("/complete", response_model=ChatResponse)
 async def chat_complete(
-    request: ChatRequest, chat_controller: SimpleChatController = Depends(get_chat_controller)
+    request: ChatRequest,
+    chat_controller: SimpleChatController = Depends(get_chat_controller),
 ):
     """Process chat message using the simplified chat controller."""
     logger.info("💬 Received chat completion request")
@@ -145,7 +150,8 @@ async def chat_complete(
 
 @router.post("/stream")
 async def chat_stream(
-    request: ChatRequest, chat_controller: SimpleChatController = Depends(get_chat_controller)
+    request: ChatRequest,
+    chat_controller: SimpleChatController = Depends(get_chat_controller),
 ):
     """Process chat message with streaming response."""
     logger.info("💬 Received chat streaming request")
@@ -184,7 +190,7 @@ async def chat_stream(
                 try:
                     # Try to parse chunk as JSON to see if it's structured
                     parsed_chunk = json.loads(chunk)
-                    if isinstance(parsed_chunk, dict) and 'type' in parsed_chunk:
+                    if isinstance(parsed_chunk, dict) and "type" in parsed_chunk:
                         # This is structured format from Mistral - send as string for frontend to parse
                         yield f"data: {json.dumps(chunk)}\n\n"
                     else:
@@ -210,26 +216,30 @@ async def chat_stream(
 
 class ClearSessionRequest(BaseModel):
     """Request model for clearing chat session."""
+
     session_id: Optional[str] = None
+
 
 @router.post("/clear")
 async def clear_chat_session(
     request: ClearSessionRequest,
-    chat_controller: SimpleChatController = Depends(get_chat_controller)
+    chat_controller: SimpleChatController = Depends(get_chat_controller),
 ):
     """Clear the chat session and conversation history."""
-    logger.info(f"💬 Received clear chat session request for session: {request.session_id or 'current'}")
-    
+    logger.info(
+        f"💬 Received clear chat session request for session: {request.session_id or 'current'}"
+    )
+
     try:
         result = chat_controller.clear_session(request.session_id)
-        
+
         if result["success"]:
             logger.info(f"✅ Chat session cleared successfully: {result['message']}")
         else:
             logger.warning(f"⚠️ Failed to clear chat session: {result['message']}")
-        
+
         return result
-    
+
     except Exception as e:
         logger.error(f"💥 Error in clear_chat_session: {e}")
         raise HTTPException(status_code=500, detail=str(e))

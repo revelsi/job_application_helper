@@ -15,18 +15,18 @@ limitations under the License.
 """
 
 import os
-import tempfile
 from pathlib import Path
+import tempfile
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from src.api.models import DocumentUploadResponse
+from src.core.document_manager import DocumentManager
 from src.core.simple_document_handler import (
     SimpleDocumentHandler,
     SimpleDocumentUploadResult,
     create_simple_document_handler,
 )
-from src.core.document_manager import DocumentManager
 from src.core.simple_document_service import get_simple_document_service
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -133,10 +133,9 @@ async def upload_document(
         # Route to appropriate specific endpoint based on category
         if category == "personal":
             return await upload_candidate_document(file, document_handler)
-        elif category == "job-specific":
+        if category == "job-specific":
             return await upload_job_document(file, document_handler)
-        else:
-            raise HTTPException(status_code=400, detail=f"Invalid category: {category}")
+        raise HTTPException(status_code=400, detail=f"Invalid category: {category}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -155,7 +154,7 @@ async def upload_candidate_document(
             content = await file.read()
             tmp_file.write(content)
             tmp_file_path = Path(tmp_file.name)
-        
+
         try:
             # Use simplified document handler - consume the generator properly
             final_result = None
@@ -209,7 +208,7 @@ async def upload_job_document(
             content = await file.read()
             tmp_file.write(content)
             tmp_file_path = Path(tmp_file.name)
-        
+
         try:
             # Use simplified document handler - consume the generator properly
             final_result = None
@@ -258,8 +257,7 @@ async def delete_document(
         success = document_manager.storage.delete_document(document_id)
         if success:
             return {"success": True, "message": "Document deleted successfully"}
-        else:
-            return {"success": False, "message": "Document not found or deletion failed"}
+        return {"success": False, "message": "Document not found or deletion failed"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete document: {e}")
 

@@ -114,10 +114,12 @@ class CredentialsManager:
 
         # Priority 3: Generate new key only if no existing key found
         self.logger.warning("No existing encryption key found - generating new key")
-        self.logger.warning("⚠️  WARNING: This will make existing encrypted credentials unrecoverable!")
-        
+        self.logger.warning(
+            "⚠️  WARNING: This will make existing encrypted credentials unrecoverable!"
+        )
+
         key = Fernet.generate_key().decode()
-        
+
         # Save key to a secure location
         try:
             key_file.write_text(key)
@@ -141,7 +143,9 @@ class CredentialsManager:
                 return self._fernet.decrypt(encrypted_data.encode()).decode()
             except Exception as e:
                 self.logger.error(f"Failed to decrypt data: {e}")
-                self.logger.error("This usually means the encryption key has changed or is incorrect")
+                self.logger.error(
+                    "This usually means the encryption key has changed or is incorrect"
+                )
                 self.logger.error("Existing encrypted credentials may be unrecoverable")
                 # Return as-is if decryption fails (might be plain text)
                 return encrypted_data
@@ -317,12 +321,14 @@ class CredentialsManager:
         # The _load_credentials method already reads from disk each time,
         # so there's no actual caching to clear, but this method provides
         # a clear interface for cache invalidation if needed in the future
-        self.logger.debug("Credentials cache cleared (credentials are always loaded fresh from disk)")
+        self.logger.debug(
+            "Credentials cache cleared (credentials are always loaded fresh from disk)"
+        )
 
     def force_reload(self) -> Dict[str, str]:
         """
         Force reload credentials from disk, bypassing any potential caching.
-        
+
         Returns:
             Freshly loaded credentials dictionary
         """

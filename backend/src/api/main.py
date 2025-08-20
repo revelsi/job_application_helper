@@ -19,7 +19,7 @@ import multiprocessing
 import signal
 import time
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -50,14 +50,16 @@ app.add_middleware(
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
     response = await call_next(request)
-    
+
     # Add security headers
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; font-src 'self'"
-    
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; font-src 'self'"
+    )
+
     return response
 
 
@@ -125,22 +127,23 @@ async def startup_event():
     """Warm up the default provider to eliminate cold-start delays."""
     print("🚀 STARTUP EVENT: Beginning provider warmup...")
     logger.info("🚀 STARTUP EVENT: Beginning provider warmup...")
-    
+
     try:
         from src.core.llm_providers.factory import get_default_provider
-        
+
         print("🔧 Attempting to get default provider...")
         logger.info("🔧 Attempting to get default provider...")
-        
+
         # Simply get the default provider to warm it up
         provider = get_default_provider()
         print(f"✅ Warmed up provider: {type(provider).__name__}")
         logger.info(f"✅ Warmed up provider: {type(provider).__name__}")
-        
+
     except Exception as e:
         print(f"⚠️ Provider warmup failed: {e}")
         logger.warning(f"⚠️ Provider warmup failed (continuing anyway): {e}")
         import traceback
+
         print(f"Traceback: {traceback.format_exc()}")
         logger.warning(f"Traceback: {traceback.format_exc()}")
 

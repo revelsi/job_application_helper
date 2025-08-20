@@ -21,10 +21,10 @@ Focuses on extracting text from PDFs and DOCX files using PyMuPDF as the primary
 Designed to be simple, reliable, and easily extensible.
 """
 
-import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+import re
 from typing import Optional, Union
 
 try:
@@ -77,30 +77,34 @@ class DocumentProcessor:
         """Redact emails and phone numbers from text with improved precision."""
         if not text:
             return text
-            
+
         original_length = len(text)
-        
+
         # More precise email regex - requires proper email format
         # This avoids matching things like "file.txt" or "version.2"
-        text = re.sub(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', '[EMAIL]', text)
-        
+        text = re.sub(
+            r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", "[EMAIL]", text
+        )
+
         # More precise phone number regex - matches common formats
         # US/International formats: (123) 456-7890, 123-456-7890, 123.456.7890, +1 123 456 7890
         phone_patterns = [
-            r'\+?1?[-.\s]?\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}\b',  # US format
-            r'\b\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}\b',  # Standard format
-            r'\+[0-9]{1,3}[-.\s]?[0-9]{1,4}[-.\s]?[0-9]{1,4}[-.\s]?[0-9]{1,9}\b',  # International
+            r"\+?1?[-.\s]?\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}\b",  # US format
+            r"\b\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}\b",  # Standard format
+            r"\+[0-9]{1,3}[-.\s]?[0-9]{1,4}[-.\s]?[0-9]{1,4}[-.\s]?[0-9]{1,9}\b",  # International
         ]
-        
+
         for pattern in phone_patterns:
-            text = re.sub(pattern, '[PHONE]', text)
-        
+            text = re.sub(pattern, "[PHONE]", text)
+
         # Log redaction impact
         final_length = len(text)
         if final_length < original_length:
             redacted_chars = original_length - final_length
-            logger.debug(f"Personal info redaction: removed {redacted_chars} characters ({redacted_chars/original_length*100:.1f}%)")
-        
+            logger.debug(
+                f"Personal info redaction: removed {redacted_chars} characters ({redacted_chars / original_length * 100:.1f}%)"
+            )
+
         return text
 
     def __init__(self):
@@ -477,12 +481,12 @@ class DocumentProcessor:
         """Extract text from TXT file using UTF-8 encoding."""
         try:
             # Try UTF-8 first
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 text = f.read()
         except UnicodeDecodeError:
             # Fallback to latin-1 if UTF-8 fails
             try:
-                with open(file_path, "r", encoding="latin-1") as f:
+                with open(file_path, encoding="latin-1") as f:
                     text = f.read()
             except Exception as e:
                 raise RuntimeError(

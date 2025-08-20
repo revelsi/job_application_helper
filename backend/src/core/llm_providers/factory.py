@@ -25,8 +25,8 @@ from typing import Dict, List, Optional
 
 from src.core.credentials import get_credentials_manager
 from src.core.llm_providers.base import LLMProvider, ProviderType
-from src.core.llm_providers.openai_provider import OPENAI_AVAILABLE, OpenAIProvider
 from src.core.llm_providers.mistral_provider import MISTRAL_AVAILABLE, MistralProvider
+from src.core.llm_providers.openai_provider import OPENAI_AVAILABLE, OpenAIProvider
 from src.utils.config import get_settings
 from src.utils.logging import get_logger
 
@@ -178,15 +178,15 @@ def clear_api_key_manager_cache() -> None:
 def force_refresh_provider_availability() -> Dict[ProviderType, bool]:
     """
     Force refresh provider availability status by clearing any cached results.
-    
+
     Returns:
         Fresh availability status for all providers
     """
     logger.debug("Forcing refresh of provider availability status")
-    
+
     # Clear the API key manager cache
     clear_api_key_manager_cache()
-    
+
     # Get fresh availability status
     return get_available_providers()
 
@@ -260,7 +260,7 @@ def get_llm_provider(
             )
         return provider
 
-    elif provider_type == ProviderType.MISTRAL:
+    if provider_type == ProviderType.MISTRAL:
         if not MISTRAL_AVAILABLE:
             raise ImportError(
                 "Mistral provider requires the mistralai package. Install with: pip install mistralai"
@@ -275,8 +275,7 @@ def get_llm_provider(
             )
         return provider
 
-    else:
-        raise ValueError(f"Unsupported provider type: {provider_type}")
+    raise ValueError(f"Unsupported provider type: {provider_type}")
 
 
 def get_default_provider() -> LLMProvider:
@@ -296,12 +295,12 @@ def get_default_provider() -> LLMProvider:
         ValueError: If no providers are available.
     """
     global _provider_cache
-    
+
     # Return cached provider if available
     if _provider_cache is not None:
         logger.debug("🔄 Returning cached default provider")
         return _provider_cache
-    
+
     logger.info("🔍 Starting LLM provider initialization...")
     settings = get_settings()
     key_manager = get_api_key_manager()
@@ -313,12 +312,12 @@ def get_default_provider() -> LLMProvider:
     # Check for available providers (environment variables or user-configured keys)
     available = get_available_providers()
     logger.debug(f"📋 Available providers: {available}")
-    
+
     if not any(available.values()):
         logger.warning("❌ No LLM providers are configured. Please configure API keys.")
         raise ValueError(
             "No LLM providers are available. Please configure API keys:\n"
-            "- Through the UI (recommended), or\n" 
+            "- Through the UI (recommended), or\n"
             "- Set environment variables (OPENAI_API_KEY, MISTRAL_API_KEY, etc.)"
         )
 
@@ -331,28 +330,28 @@ def get_default_provider() -> LLMProvider:
         elif provider_name == "mistral":
             preferred_provider = ProviderType.MISTRAL
         logger.info(f"🎯 User prefers provider: {provider_name}")
-    
+
     # Try preferred provider first if specified and available
     provider_order = []
     if preferred_provider and available.get(preferred_provider, False):
         provider_order.append(preferred_provider)
         logger.info(f"🔍 Trying preferred provider: {preferred_provider.value}")
-    
+
     # Add remaining providers as fallbacks
     for provider_type in [ProviderType.OPENAI, ProviderType.MISTRAL]:
         if provider_type not in provider_order and available.get(provider_type, False):
             provider_order.append(provider_type)
-    
+
     # Try providers in order
     for provider_type in provider_order:
         try:
             provider = get_llm_provider(provider_type)
             logger.info(f"✅ Successfully initialized {provider_type.value}")
-            
+
             # Cache the provider for future use
             _provider_cache = provider
             logger.debug("💾 Cached default provider for future requests")
-            
+
             return provider
         except Exception as e:
             logger.warning(f"❌ Failed to initialize {provider_type.value}: {e}")
@@ -453,7 +452,9 @@ def list_provider_info() -> List[Dict[str, any]]:
                     "configured": config_status.get("mistral", {}).get(
                         "configured", False
                     ),
-                    "key_source": config_status.get("mistral", {}).get("source", "none"),
+                    "key_source": config_status.get("mistral", {}).get(
+                        "source", "none"
+                    ),
                     "capabilities": mistral.capabilities,
                     "default_model": mistral.get_default_model(),
                     "description": "Magistral Small reasoning model with <think></think> output",

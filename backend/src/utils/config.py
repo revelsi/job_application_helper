@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Optional
 
 from cryptography.fernet import Fernet
-from pydantic import Field, validator, ConfigDict
+from pydantic import ConfigDict, Field, validator
 from pydantic_settings import BaseSettings
 
 
@@ -45,7 +45,9 @@ class Settings(BaseSettings):
     openai_api_key: Optional[str] = Field(default=None, env="OPENAI_API_KEY")
     anthropic_api_key: Optional[str] = Field(default=None, env="ANTHROPIC_API_KEY")
     mistral_api_key: Optional[str] = Field(default=None, env="MISTRAL_API_KEY")
-    default_llm_provider: Optional[str] = Field(default=None, env="DEFAULT_LLM_PROVIDER")
+    default_llm_provider: Optional[str] = Field(
+        default=None, env="DEFAULT_LLM_PROVIDER"
+    )
 
     # External APIs
     linkedin_api_key: Optional[str] = Field(default=None, env="LINKEDIN_API_KEY")
@@ -61,15 +63,25 @@ class Settings(BaseSettings):
     max_upload_size_mb: int = Field(default=10, env="MAX_UPLOAD_SIZE_MB")
 
     # Document Processing Configuration
-    max_context_length: int = Field(default=100000, env="MAX_CONTEXT_LENGTH")  # ~100K chars ≈ 25K tokens for GPT-4.1-mini
-    
+    max_context_length: int = Field(
+        default=100000, env="MAX_CONTEXT_LENGTH"
+    )  # ~100K chars ≈ 25K tokens for GPT-4.1-mini
+
     # Per-document context limits (significantly increased for modern LLMs)
-    max_candidate_doc_length: int = Field(default=50000, env="MAX_CANDIDATE_DOC_LENGTH")  # Allow full CV content
-    max_job_doc_length: int = Field(default=30000, env="MAX_JOB_DOC_LENGTH")  # Allow detailed job descriptions
-    max_company_doc_length: int = Field(default=20000, env="MAX_COMPANY_DOC_LENGTH")  # Allow comprehensive company info
+    max_candidate_doc_length: int = Field(
+        default=50000, env="MAX_CANDIDATE_DOC_LENGTH"
+    )  # Allow full CV content
+    max_job_doc_length: int = Field(
+        default=30000, env="MAX_JOB_DOC_LENGTH"
+    )  # Allow detailed job descriptions
+    max_company_doc_length: int = Field(
+        default=20000, env="MAX_COMPANY_DOC_LENGTH"
+    )  # Allow comprehensive company info
 
     # Chat Generation Configuration
-    chat_max_tokens: int = Field(default=16000, env="CHAT_MAX_TOKENS")  # Increased for reasoning models that need space for thinking + final answer
+    chat_max_tokens: int = Field(
+        default=16000, env="CHAT_MAX_TOKENS"
+    )  # Increased for reasoning models that need space for thinking + final answer
     conversation_context_limit: int = Field(default=3, env="CONVERSATION_CONTEXT_LIMIT")
 
     # Multi-Query Configuration
@@ -81,9 +93,7 @@ class Settings(BaseSettings):
     # API Rate Limiting
     api_rate_limit: int = Field(default=60, env="API_RATE_LIMIT")
 
-    @validator(
-        "data_dir", "documents_path", "cache_path", pre=True
-    )
+    @validator("data_dir", "documents_path", "cache_path", pre=True)
     @classmethod
     def convert_to_path(cls, v):
         """Convert string paths to Path objects."""
@@ -103,7 +113,7 @@ class Settings(BaseSettings):
     model_config = ConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
-        extra="allow"  # Allow extra fields like default_llm_provider
+        extra="allow",  # Allow extra fields like default_llm_provider
     )
 
 
@@ -157,18 +167,20 @@ def ensure_encryption_setup(settings: Settings) -> Optional[str]:
     except (PermissionError, OSError) as e:
         # Docker containers may not have permission to access mounted volumes
         # This is expected in some Docker setups, so we'll continue to generate a new key
-        print(f"⚠️  Warning: Cannot access encryption key file (likely Docker permissions): {e}")
+        print(
+            f"⚠️  Warning: Cannot access encryption key file (likely Docker permissions): {e}"
+        )
         print("   Continuing with key generation...")
 
     # Priority 3: Generate new key for this session
     print("🔐 Job Application Helper - Security Setup")
     print("   ⚠️  No existing encryption key found - generating new key")
-    
+
     key = Fernet.generate_key().decode()
-    
+
     # Try to save to .env file (works in development, may fail in Docker)
     success = update_env_file("ENCRYPTION_KEY", key)
-    
+
     if success:
         print("   ✅ Encryption enabled for data protection")
         print("   🔑 Generated new encryption key")
@@ -179,9 +191,11 @@ def ensure_encryption_setup(settings: Settings) -> Optional[str]:
         print("   ✅ Encryption enabled for data protection")
         print("   🔑 Generated new encryption key for this session")
         print("   ⚠️  Key not persisted - will be regenerated on restart")
-        print("   💡 For Docker: Set ENCRYPTION_KEY environment variable to persist key")
+        print(
+            "   💡 For Docker: Set ENCRYPTION_KEY environment variable to persist key"
+        )
         print("   ⚙️  To disable encryption, set ENABLE_ENCRYPTION=false")
-    
+
     return key
 
 
@@ -201,7 +215,7 @@ def update_env_file(key: str, value: str) -> bool:
 
         # Read existing content
         if env_path.exists():
-            with open(env_path, "r", encoding="utf-8") as f:
+            with open(env_path, encoding="utf-8") as f:
                 lines = f.readlines()
         else:
             lines = []
@@ -263,9 +277,7 @@ def validate_required_settings(settings: Settings) -> None:
     )
 
     if not openai_valid:
-        errors.append(
-            "OPENAI_API_KEY must be provided"
-        )
+        errors.append("OPENAI_API_KEY must be provided")
 
     if errors:
         raise ValueError(
@@ -273,5 +285,5 @@ def validate_required_settings(settings: Settings) -> None:
         )
 
 
-# Note: Settings are instantiated on-demand via get_settings() 
+# Note: Settings are instantiated on-demand via get_settings()
 # to avoid import-time configuration errors

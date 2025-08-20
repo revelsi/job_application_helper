@@ -21,8 +21,9 @@ Provides integration with Mistral AI API using the unified LLM provider interfac
 Supports reasoning models like Magistral Small with <think></think> output parsing.
 """
 
+from collections.abc import AsyncGenerator
 import re
-from typing import Any, AsyncGenerator, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 try:
     from mistralai import Mistral
@@ -65,7 +66,7 @@ class MistralProvider(LLMProvider):
 
         # Set API key from settings if not provided
         if not self.api_key:
-            self.api_key = getattr(self.settings, 'mistral_api_key', None)
+            self.api_key = getattr(self.settings, "mistral_api_key", None)
 
     @property
     def provider_type(self) -> ProviderType:
@@ -83,7 +84,7 @@ class MistralProvider(LLMProvider):
             cost_per_1k_tokens=0.0002,  # Estimated cost per 1k tokens
             models=[
                 "magistral-small-2506",
-                "magistral-medium-2506", 
+                "magistral-medium-2506",
                 "mistral-small-2506",  # Lightweight model for classification tasks
             ],
         )
@@ -117,10 +118,10 @@ class MistralProvider(LLMProvider):
 
         # For reasoning models, we let Mistral handle the system prompt
         # by using prompt_mode="reasoning", but we can add context in user message
-        
+
         # Build user message with context if provided
         user_content = ""
-        
+
         # Add context if provided
         if request.context:
             context_parts = []
@@ -183,29 +184,29 @@ class MistralProvider(LLMProvider):
     def _parse_reasoning_response(self, content: str) -> tuple[str, str]:
         """
         Parse reasoning response to extract thinking and final answer.
-        
+
         Args:
             content: Raw response content with <think></think> tags
-            
+
         Returns:
             Tuple of (reasoning_trace, final_answer)
         """
         # Extract thinking section
-        think_pattern = r'<think>(.*?)</think>'
+        think_pattern = r"<think>(.*?)</think>"
         think_match = re.search(think_pattern, content, re.DOTALL)
-        
+
         if think_match:
             reasoning_trace = think_match.group(1).strip()
             # Extract final answer (everything after </think>)
-            raw_answer = content[think_match.end():].strip()
-            
+            raw_answer = content[think_match.end() :].strip()
+
             # Clean up the final answer by extracting only the final answer section if present
             final_answer = self._extract_final_answer(raw_answer)
         else:
             # Fallback: if no thinking tags, treat entire content as final answer
             reasoning_trace = ""
             final_answer = self._extract_final_answer(content.strip())
-            
+
         return reasoning_trace, final_answer
 
     def _extract_final_answer(self, content: str) -> str:
@@ -215,22 +216,22 @@ class MistralProvider(LLMProvider):
     def _extract_boxed_content(self, text: str) -> tuple[str, str]:
         """
         Extract content from \boxed{} as the final answer.
-        
+
         Returns:
             Tuple of (remaining_text, boxed_content)
         """
         import re
-        
+
         # Look for \boxed{...} pattern
-        boxed_pattern = r'\\boxed\{([^}]*)\}'
+        boxed_pattern = r"\\boxed\{([^}]*)\}"
         match = re.search(boxed_pattern, text)
-        
+
         if match:
             boxed_content = match.group(1)
             # Remove the \boxed{} from the text
-            remaining_text = re.sub(boxed_pattern, '', text).strip()
+            remaining_text = re.sub(boxed_pattern, "", text).strip()
             return remaining_text, boxed_content
-        
+
         return text, ""
 
     def _parse_response(
@@ -238,21 +239,25 @@ class MistralProvider(LLMProvider):
     ) -> tuple[str, int, Optional[str]]:
         """Parse Mistral response into (content, tokens_used, request_id)."""
         raw_content = response.choices[0].message.content
-        
+
         # Parse reasoning vs final answer
         reasoning_trace, final_answer = self._parse_reasoning_response(raw_content)
-        
+
         # For now, return the final answer as the main content
         # In the future, we could modify the response format to include reasoning
         content = final_answer
-        
+
         # Add reasoning trace as a comment for debugging (optional)
         if reasoning_trace and len(reasoning_trace) > 0:
             self.logger.debug(f"Reasoning trace: {reasoning_trace[:200]}...")
-        
-        tokens_used = getattr(response.usage, 'total_tokens', 0) if hasattr(response, 'usage') and response.usage else 0
+
+        tokens_used = (
+            getattr(response.usage, "total_tokens", 0)
+            if hasattr(response, "usage") and response.usage
+            else 0
+        )
         request_id = getattr(response, "id", None)
-        
+
         return content, tokens_used, request_id
 
     async def generate_content_stream(
@@ -301,27 +306,35 @@ class MistralProvider(LLMProvider):
             thinking_complete = False
             thinking_content = ""
             final_answer = ""  # Accumulate final answer content (don't stream it)
-            
+
             # Process stream chunks - SIMPLE APPROACH
             for chunk in stream:
-                if hasattr(chunk, 'data') and chunk.data and hasattr(chunk.data, 'choices'):
+                if (
+                    hasattr(chunk, "data")
+                    and chunk.data
+                    and hasattr(chunk.data, "choices")
+                ):
                     if chunk.data.choices and len(chunk.data.choices) > 0:
                         delta = chunk.data.choices[0].delta
-                        if hasattr(delta, 'content') and delta.content:
+                        if hasattr(delta, "content") and delta.content:
                             content_chunk = delta.content
                             buffer += content_chunk
-                            
+
                             # Handle <think> tag detection
-                            if not in_thinking and not thinking_complete and '<think>' in buffer:
+                            if (
+                                not in_thinking
+                                and not thinking_complete
+                                and "<think>" in buffer
+                            ):
                                 in_thinking = True
                                 # Remove everything up to and including <think>
-                                buffer = buffer.split('<think>', 1)[-1]
+                                buffer = buffer.split("<think>", 1)[-1]
                                 continue
-                            
+
                             # Handle </think> tag detection
-                            if in_thinking and '</think>' in buffer:
+                            if in_thinking and "</think>" in buffer:
                                 # Extract thinking content before </think>
-                                parts = buffer.split('</think>', 1)
+                                parts = buffer.split("</think>", 1)
                                 thinking_content += parts[0]
                                 # Signal thinking is complete
                                 yield '{"type":"thinking_complete"}'
@@ -330,27 +343,37 @@ class MistralProvider(LLMProvider):
                                 # Start accumulating final answer content
                                 final_answer = parts[1] if len(parts) > 1 else ""
                                 continue
-                                        
+
                             # Yield content based on current state
                             if in_thinking:
                                 # Stream thinking content as it arrives
                                 import json
-                                yield json.dumps({"type": "thinking", "content": content_chunk})
+
+                                yield json.dumps(
+                                    {"type": "thinking", "content": content_chunk}
+                                )
                             elif thinking_complete:
                                 # Accumulate final answer content (don't stream it)
                                 final_answer += content_chunk
-                            elif not in_thinking and len(buffer) > 50 and '<think>' not in buffer:
+                            elif (
+                                not in_thinking
+                                and len(buffer) > 50
+                                and "<think>" not in buffer
+                            ):
                                 # No thinking detected - accumulate everything as final answer
                                 thinking_complete = True
                                 final_answer += buffer
                                 buffer = ""
-            
+
             # After streaming is complete, process and send the final answer
             if final_answer.strip():
                 # Check if there's boxed content to extract
-                remaining_text, boxed_content = self._extract_boxed_content(final_answer)
-                
+                remaining_text, boxed_content = self._extract_boxed_content(
+                    final_answer
+                )
+
                 import json
+
                 if boxed_content:
                     # Send the content before the boxed part
                     if remaining_text.strip():
@@ -360,7 +383,7 @@ class MistralProvider(LLMProvider):
                 else:
                     # No boxed content, send everything as regular answer
                     yield json.dumps({"type": "answer", "content": final_answer})
-                
+
         except Exception as e:
             self.logger.error(f"Mistral streaming generation failed: {e}")
             raise
@@ -376,4 +399,4 @@ def get_mistral_provider(api_key: Optional[str] = None) -> MistralProvider:
     Returns:
         Configured Mistral provider.
     """
-    return MistralProvider(api_key=api_key) 
+    return MistralProvider(api_key=api_key)

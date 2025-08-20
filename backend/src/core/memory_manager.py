@@ -25,14 +25,14 @@ This module provides:
 - Memory optimization and cleanup strategies
 """
 
-import json
-import sqlite3
-import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
+import json
 from pathlib import Path
+import sqlite3
 from typing import Any, Dict, List, Optional
+import uuid
 
 from src.utils.config import get_settings
 from src.utils.logging import get_logger
@@ -445,11 +445,15 @@ class MessageManager:
 class ContextWindowManager:
     """Manages context window optimization for LLM interactions."""
 
-    def __init__(self, max_tokens: int = 120000):  # Updated for GPT-4.1-mini 128K context
+    def __init__(
+        self, max_tokens: int = 120000
+    ):  # Updated for GPT-4.1-mini 128K context
         """Initialize context window manager."""
         self.max_tokens = max_tokens
         self.system_message_tokens = 500  # Increased reserved space for system messages
-        self.response_buffer_tokens = 16000  # Increased buffer to match new chat_max_tokens for reasoning models
+        self.response_buffer_tokens = (
+            16000  # Increased buffer to match new chat_max_tokens for reasoning models
+        )
         # Ensure we have at least some tokens available for conversation history
         self.available_tokens = max(
             1000, max_tokens - self.system_message_tokens - self.response_buffer_tokens
@@ -484,16 +488,18 @@ class ContextWindowManager:
                 # If we can't fit this message, try to include a summary of what we're missing
                 if len(included_messages) > 0:
                     # Get the messages that weren't included (remaining messages)
-                    excluded_messages = messages[messages.index(message):]
+                    excluded_messages = messages[messages.index(message) :]
                     if excluded_messages:
                         summary = self._create_context_summary(excluded_messages)
                         if summary:
                             summary_tokens = self._estimate_tokens(summary)
                             if current_tokens + summary_tokens <= self.available_tokens:
-                                included_messages.append({
-                                    "role": "system",
-                                    "content": f"Previous conversation summary: {summary}",
-                                })
+                                included_messages.append(
+                                    {
+                                        "role": "system",
+                                        "content": f"Previous conversation summary: {summary}",
+                                    }
+                                )
                 break
 
         optimized_messages.extend(included_messages)
@@ -519,23 +525,33 @@ class ContextWindowManager:
 
         # Create a more comprehensive summary
         summary_parts = []
-        
+
         # Include recent user requests (last 2-3)
         if user_messages:
             recent_user_messages = user_messages[-3:]  # Last 3 user messages
             if len(recent_user_messages) == 1:
-                summary_parts.append(f"User requested: {recent_user_messages[0][:150]}...")
+                summary_parts.append(
+                    f"User requested: {recent_user_messages[0][:150]}..."
+                )
             else:
-                user_summary = "; ".join([msg[:100] + "..." for msg in recent_user_messages])
+                user_summary = "; ".join(
+                    [msg[:100] + "..." for msg in recent_user_messages]
+                )
                 summary_parts.append(f"User discussed: {user_summary}")
-        
+
         # Include recent assistant responses (last 2-3)
         if assistant_messages:
-            recent_assistant_messages = assistant_messages[-3:]  # Last 3 assistant messages
+            recent_assistant_messages = assistant_messages[
+                -3:
+            ]  # Last 3 assistant messages
             if len(recent_assistant_messages) == 1:
-                summary_parts.append(f"Assistant provided: {recent_assistant_messages[0][:150]}...")
+                summary_parts.append(
+                    f"Assistant provided: {recent_assistant_messages[0][:150]}..."
+                )
             else:
-                assistant_summary = "; ".join([msg[:100] + "..." for msg in recent_assistant_messages])
+                assistant_summary = "; ".join(
+                    [msg[:100] + "..." for msg in recent_assistant_messages]
+                )
                 summary_parts.append(f"Assistant helped with: {assistant_summary}")
 
         return " ".join(summary_parts)
@@ -544,7 +560,9 @@ class ContextWindowManager:
 class MemoryManager:
     """Main memory management system for chat functionality."""
 
-    def __init__(self, db_path: Optional[Path] = None, max_context_tokens: int = 120000):  # Updated for GPT-4.1-mini
+    def __init__(
+        self, db_path: Optional[Path] = None, max_context_tokens: int = 120000
+    ):  # Updated for GPT-4.1-mini
         """Initialize memory manager."""
         self.db = MemoryDatabase(db_path)
         self.session_manager = SessionManager(self.db)
@@ -626,7 +644,9 @@ class MemoryManager:
         """Get all active sessions."""
         return self.session_manager.list_sessions(SessionStatus.ACTIVE)
 
-    def create_session(self, title: str = "", metadata: Optional[Dict[str, Any]] = None) -> str:
+    def create_session(
+        self, title: str = "", metadata: Optional[Dict[str, Any]] = None
+    ) -> str:
         """Create a new session and return its ID."""
         session = self.session_manager.create_session(title, metadata)
         return session.session_id

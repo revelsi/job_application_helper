@@ -28,8 +28,8 @@ The analyzer uses the same LLM infrastructure as other components for consistent
 intelligent query understanding and routing.
 """
 
-import json
 from dataclasses import dataclass
+import json
 from typing import Any, Dict, List, Optional
 
 from src.core.llm_providers.base import ContentType, GenerationRequest, LLMProvider
@@ -44,6 +44,7 @@ class QueryAnalysis:
     """
     Results from query analysis containing intent, weighting, and metadata.
     """
+
     intent_type: str = "general"
     intent_parameters: Dict[str, Any] = None
     document_weights: Dict[str, float] = None
@@ -51,7 +52,7 @@ class QueryAnalysis:
     expanded_queries: List[str] = None
     confidence: float = 0.0
     reasoning: str = ""
-    
+
     def __post_init__(self):
         """Initialize default values."""
         if self.intent_parameters is None:
@@ -65,64 +66,62 @@ class QueryAnalysis:
 class QueryAnalyzer:
     """
     LLM-based query analyzer for intelligent intent detection and document weighting.
-    
+
     This analyzer uses sophisticated LLM reasoning to understand user queries,
     detect intent, and determine optimal document retrieval strategies.
     """
-    
+
     def __init__(self, llm_provider: Optional[LLMProvider] = None):
         """
         Initialize the query analyzer.
-        
+
         Args:
             llm_provider: LLM provider for analysis (will get default if None)
         """
         self.llm_provider = llm_provider or get_default_provider()
         self.llm_available = self.llm_provider is not None
-        
+
         if not self.llm_available:
-            logger.warning("Query analyzer initialized without LLM provider - using fallback rules")
+            logger.warning(
+                "Query analyzer initialized without LLM provider - using fallback rules"
+            )
         else:
             logger.info("Query analyzer initialized with LLM provider")
-    
+
     def analyze_query(
-        self, 
-        query: str, 
-        conversation_history: Optional[List[Dict[str, Any]]] = None
+        self, query: str, conversation_history: Optional[List[Dict[str, Any]]] = None
     ) -> QueryAnalysis:
         """
         Analyze a user query to determine intent and document relevance.
-        
+
         Args:
             query: User query to analyze
             conversation_history: Recent conversation context
-            
+
         Returns:
             QueryAnalysis with intent, weights, and metadata
         """
         if not self.llm_available:
             logger.debug("No LLM available - using rule-based analysis")
             return self._fallback_analysis(query)
-        
+
         try:
             # Use LLM for sophisticated query analysis
             return self._llm_analysis(query, conversation_history)
         except Exception as e:
             logger.warning(f"LLM query analysis failed: {e}")
             return self._fallback_analysis(query)
-    
+
     def _llm_analysis(
-        self, 
-        query: str, 
-        conversation_history: Optional[List[Dict[str, Any]]] = None
+        self, query: str, conversation_history: Optional[List[Dict[str, Any]]] = None
     ) -> QueryAnalysis:
         """
         Perform LLM-based query analysis for sophisticated intent detection.
-        
+
         Args:
             query: User query to analyze
             conversation_history: Recent conversation context
-            
+
         Returns:
             QueryAnalysis with LLM-determined intent and weights
         """
@@ -130,11 +129,13 @@ class QueryAnalyzer:
         context_summary = ""
         if conversation_history:
             recent_messages = conversation_history[-3:]  # Last 3 exchanges
-            context_summary = "\n".join([
-                f"{'User' if msg.get('role') == 'user' else 'Assistant'}: {msg.get('content', '')[:200]}"
-                for msg in recent_messages
-            ])
-        
+            context_summary = "\n".join(
+                [
+                    f"{'User' if msg.get('role') == 'user' else 'Assistant'}: {msg.get('content', '')[:200]}"
+                    for msg in recent_messages
+                ]
+            )
+
         # Create sophisticated analysis prompt
         analysis_prompt = f"""You are an expert query analyzer for a job application assistant system.
 
@@ -204,13 +205,13 @@ Analysis:"""
         # Use LLM for analysis - choose appropriate small/fast model based on provider
         # Determine the best small model for the current provider
         small_model = None
-        if hasattr(self.llm_provider, 'provider_type'):
+        if hasattr(self.llm_provider, "provider_type"):
             if self.llm_provider.provider_type.value == "openai":
                 small_model = "gpt-4.1-nano"  # OpenAI's small/fast model
             elif self.llm_provider.provider_type.value == "mistral":
                 small_model = "mistral-small-2506"  # Mistral's lightweight model for classification
             # For other providers, let them use their default model
-        
+
         request = GenerationRequest(
             prompt=analysis_prompt,
             content_type=ContentType.GENERAL_RESPONSE,
@@ -219,30 +220,30 @@ Analysis:"""
             temperature=0.2,  # Low temperature for consistent analysis
             model=small_model,  # Use provider-appropriate small/fast model
         )
-        
+
         response = self.llm_provider.generate_content(request)
-        
+
         if not response.success:
             logger.error(f"LLM query analysis failed: {response.error}")
             return self._fallback_analysis(query)
-        
+
         try:
             # Parse LLM response
             content = response.content.strip()
-            
+
             # Clean JSON from markdown formatting
             if content.startswith("```json"):
                 content = content[7:]
             if content.endswith("```"):
                 content = content[:-3]
             content = content.strip()
-            
+
             analysis_data = json.loads(content)
-            
+
             # Validate and normalize weights
             weights = analysis_data.get("document_weights", {})
             weights = self._normalize_weights(weights)
-            
+
             return QueryAnalysis(
                 intent_type=analysis_data.get("intent_type", "general"),
                 intent_parameters=analysis_data.get("intent_parameters", {}),
@@ -250,68 +251,95 @@ Analysis:"""
                 is_multi_query=analysis_data.get("is_multi_query", False),
                 expanded_queries=analysis_data.get("expanded_queries", []),
                 confidence=float(analysis_data.get("confidence", 0.0)),
-                reasoning=analysis_data.get("reasoning", "LLM analysis completed")
+                reasoning=analysis_data.get("reasoning", "LLM analysis completed"),
             )
-            
+
         except (json.JSONDecodeError, KeyError, ValueError) as e:
             logger.error(f"Failed to parse LLM query analysis: {e}")
             logger.debug(f"Raw LLM response: {response.content}")
             return self._fallback_analysis(query)
-    
+
     def _fallback_analysis(self, query: str) -> QueryAnalysis:
         """
         Fallback rule-based analysis when LLM is unavailable.
-        
+
         Args:
             query: User query to analyze
-            
+
         Returns:
             QueryAnalysis with rule-based intent and weights
         """
         query_lower = query.lower()
-        
+
         # Rule-based intent detection
         intent_type = "general"
         intent_parameters = {}
-        
+
         # Cover letter patterns
-        if any(term in query_lower for term in ["cover letter", "application letter", "motivation letter"]):
+        if any(
+            term in query_lower
+            for term in ["cover letter", "application letter", "motivation letter"]
+        ):
             intent_type = "cover_letter"
-        
+
         # Interview patterns
-        elif any(term in query_lower for term in ["interview", "behavioral", "star method", "tell me about"]):
+        elif any(
+            term in query_lower
+            for term in ["interview", "behavioral", "star method", "tell me about"]
+        ):
             intent_type = "behavioral_interview"
-        
+
         # Achievement patterns
-        elif any(term in query_lower for term in ["quantify", "achievement", "impact", "results", "metrics"]):
+        elif any(
+            term in query_lower
+            for term in ["quantify", "achievement", "impact", "results", "metrics"]
+        ):
             intent_type = "achievement_quantifier"
-        
+
         # ATS patterns
-        elif any(term in query_lower for term in ["ats", "keyword", "optimize", "applicant tracking"]):
+        elif any(
+            term in query_lower
+            for term in ["ats", "keyword", "optimize", "applicant tracking"]
+        ):
             intent_type = "ats_optimizer"
-        
+
         # Content refinement patterns
-        elif any(term in query_lower for term in ["improve", "refine", "better", "enhance", "rewrite"]):
+        elif any(
+            term in query_lower
+            for term in ["improve", "refine", "better", "enhance", "rewrite"]
+        ):
             intent_type = "content_refinement"
-        
+
         # Rule-based document weighting
         weights = {"candidate": 0.4, "job": 0.3, "company": 0.3}
-        
+
         # Candidate-focused queries
-        if any(term in query_lower for term in ["my", "i", "me", "skills", "experience", "background"]):
+        if any(
+            term in query_lower
+            for term in ["my", "i", "me", "skills", "experience", "background"]
+        ):
             weights = {"candidate": 0.6, "job": 0.25, "company": 0.15}
-        
+
         # Job-focused queries
-        elif any(term in query_lower for term in ["job", "role", "position", "requirements", "qualifications"]):
+        elif any(
+            term in query_lower
+            for term in ["job", "role", "position", "requirements", "qualifications"]
+        ):
             weights = {"candidate": 0.25, "job": 0.6, "company": 0.15}
-        
+
         # Company-focused queries
-        elif any(term in query_lower for term in ["company", "organization", "culture", "research"]):
+        elif any(
+            term in query_lower
+            for term in ["company", "organization", "culture", "research"]
+        ):
             weights = {"candidate": 0.15, "job": 0.25, "company": 0.6}
-        
+
         # Multi-query detection
-        is_multi_query = any(separator in query for separator in ["?", "and", "also", "additionally", ";"])
-        
+        is_multi_query = any(
+            separator in query
+            for separator in ["?", "and", "also", "additionally", ";"]
+        )
+
         return QueryAnalysis(
             intent_type=intent_type,
             intent_parameters=intent_parameters,
@@ -319,26 +347,26 @@ Analysis:"""
             is_multi_query=is_multi_query,
             expanded_queries=[],
             confidence=0.7,  # Moderate confidence for rule-based
-            reasoning=f"Rule-based analysis: detected {intent_type} intent with {max(weights, key=weights.get)} focus"
+            reasoning=f"Rule-based analysis: detected {intent_type} intent with {max(weights, key=weights.get)} focus",
         )
-    
+
     def _normalize_weights(self, weights: Dict[str, float]) -> Dict[str, float]:
         """
         Normalize document weights to ensure they sum to 1.0.
-        
+
         Args:
             weights: Raw weights dictionary
-            
+
         Returns:
             Normalized weights dictionary
         """
         # Ensure all required keys exist
         required_keys = ["candidate", "job", "company"]
         normalized = {}
-        
+
         for key in required_keys:
             normalized[key] = max(0.0, min(1.0, weights.get(key, 0.33)))
-        
+
         # Normalize to sum to 1.0
         total = sum(normalized.values())
         if total > 0:
@@ -348,31 +376,31 @@ Analysis:"""
             # Equal weights as fallback
             for key in normalized:
                 normalized[key] = 1.0 / len(required_keys)
-        
+
         return normalized
-    
+
     def get_expanded_queries(self, original_query: str) -> List[str]:
         """
         Generate expanded queries for better context retrieval.
-        
+
         Args:
             original_query: Original user query
-            
+
         Returns:
             List of expanded/refined queries
         """
         analysis = self.analyze_query(original_query)
         return analysis.expanded_queries
-    
+
     def get_document_priority(self, query: str) -> str:
         """
         Get the highest priority document type for a query.
-        
+
         Args:
             query: User query
-            
+
         Returns:
             Document type with highest weight ('candidate', 'job', or 'company')
         """
         analysis = self.analyze_query(query)
-        return max(analysis.document_weights, key=analysis.document_weights.get) 
+        return max(analysis.document_weights, key=analysis.document_weights.get)

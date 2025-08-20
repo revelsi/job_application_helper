@@ -25,13 +25,13 @@ This module provides:
 - Encryption for sensitive information
 """
 
-import hashlib
-import json
-import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+import hashlib
+import json
 from pathlib import Path
+import sqlite3
 from typing import Any, Dict, List, Optional
 
 from cryptography.fernet import Fernet
@@ -371,8 +371,8 @@ class DatabaseManager:
             return ensure_encryption_setup
         except ImportError:
             # Fallback for when running as script
-            import sys
             from pathlib import Path
+            import sys
 
             sys.path.insert(0, str(Path(__file__).parent.parent))
             from utils.config import ensure_encryption_setup
@@ -669,9 +669,9 @@ class DocumentStorage:
             update_fields.append(f"{field_name} = ?")
 
             # Handle special field formatting
-            if field_name == "document_type" and isinstance(value, DocumentType):
-                params.append(value.value)
-            elif field_name == "status" and isinstance(value, DocumentStatus):
+            if (field_name == "document_type" and isinstance(value, DocumentType)) or (
+                field_name == "status" and isinstance(value, DocumentStatus)
+            ):
                 params.append(value.value)
             elif field_name == "tags" and isinstance(value, list):
                 params.append(json.dumps(value))
@@ -696,11 +696,12 @@ class DocumentStorage:
                     # Single field update - field names are validated above
                     # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
                     cursor = conn.execute(
-                        "UPDATE documents SET " + update_fields[0] + " WHERE id = ?", params
+                        "UPDATE documents SET " + update_fields[0] + " WHERE id = ?",
+                        params,
                     )
                 else:
                     # Multiple field updates - field names are validated above, values parameterized
-                    update_clause = ', '.join(update_fields)
+                    update_clause = ", ".join(update_fields)
                     query_template = "UPDATE documents SET {} WHERE id = ?"
                     final_query = query_template.format(update_clause)
                     # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
@@ -906,9 +907,8 @@ class FileSystemManager:
                 file_path.unlink()
                 self.logger.info(f"Deleted file: {file_path}")
                 return True
-            else:
-                self.logger.warning(f"File not found for deletion: {file_path}")
-                return False
+            self.logger.warning(f"File not found for deletion: {file_path}")
+            return False
 
         except Exception as e:
             self.logger.error(f"Failed to delete file {file_path}: {e}")

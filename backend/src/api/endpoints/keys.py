@@ -26,7 +26,13 @@ from typing import Dict, List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from src.core.llm_providers.factory import get_api_key_manager, list_provider_info, clear_api_key_manager_cache, force_refresh_provider_availability, clear_provider_cache
+from src.core.llm_providers.factory import (
+    clear_api_key_manager_cache,
+    clear_provider_cache,
+    force_refresh_provider_availability,
+    get_api_key_manager,
+    list_provider_info,
+)
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -157,7 +163,7 @@ async def set_api_key(request: APIKeyRequest):
             clear_api_key_manager_cache()
             force_refresh_provider_availability()
             clear_provider_cache()
-            
+
             logger.info(f"API key set successfully for {request.provider}")
             return APIKeyResponse(
                 success=True,
@@ -165,9 +171,8 @@ async def set_api_key(request: APIKeyRequest):
                 provider=request.provider,
                 configured=True,
             )
-        else:
-            logger.error(f"Failed to store API key for {request.provider}")
-            raise HTTPException(status_code=500, detail="Failed to store API key")
+        logger.error(f"Failed to store API key for {request.provider}")
+        raise HTTPException(status_code=500, detail="Failed to store API key")
 
     except HTTPException:
         raise
@@ -209,9 +214,8 @@ async def remove_api_key(provider: str):
                 provider=provider,
                 configured=False,
             )
-        else:
-            logger.error(f"Failed to remove API key for {provider}")
-            raise HTTPException(status_code=500, detail="Failed to remove API key")
+        logger.error(f"Failed to remove API key for {provider}")
+        raise HTTPException(status_code=500, detail="Failed to remove API key")
 
     except HTTPException:
         raise
@@ -253,7 +257,9 @@ async def test_api_key(provider: str):
         elif provider == "mistral":
             provider_type = ProviderType.MISTRAL
         else:
-            raise HTTPException(status_code=400, detail=f"Unsupported provider: {provider}")
+            raise HTTPException(
+                status_code=400, detail=f"Unsupported provider: {provider}"
+            )
 
         llm_provider = get_llm_provider(provider_type, api_key)
 
@@ -266,16 +272,13 @@ async def test_api_key(provider: str):
                 provider=provider,
                 configured=True,
             )
-        else:
-            logger.warning(
-                f"API key test failed for {provider} - provider not available"
-            )
-            return APIKeyResponse(
-                success=False,
-                message=f"API key for {provider} is not working",
-                provider=provider,
-                configured=False,
-            )
+        logger.warning(f"API key test failed for {provider} - provider not available")
+        return APIKeyResponse(
+            success=False,
+            message=f"API key for {provider} is not working",
+            provider=provider,
+            configured=False,
+        )
 
     except HTTPException:
         raise

@@ -21,8 +21,8 @@ Provides input sanitization and validation functions to protect against
 security vulnerabilities in user inputs and AI interactions.
 """
 
-import re
 from pathlib import Path
+import re
 from typing import Optional
 
 from src.utils.logging import get_logger
@@ -196,9 +196,9 @@ class InputValidator:
         # Generic user-friendly messages for common errors
         if "permission" in sanitized.lower():
             return "Access denied. Please check file permissions."
-        elif "not found" in sanitized.lower():
+        if "not found" in sanitized.lower():
             return "File or resource not found."
-        elif "connection" in sanitized.lower():
+        if "connection" in sanitized.lower():
             return "Connection error. Please check your internet connection."
 
         return sanitized

@@ -20,7 +20,8 @@ OpenAI LLM Provider Implementation.
 Provides integration with OpenAI API using the unified LLM provider interface.
 """
 
-from typing import Any, AsyncGenerator, Dict, List, Optional
+from collections.abc import AsyncGenerator
+from typing import Any, Dict, List, Optional
 
 try:
     from openai import OpenAI

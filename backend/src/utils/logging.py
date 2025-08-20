@@ -24,8 +24,8 @@ This module provides centralized logging configuration with:
 """
 
 import logging
-import sys
 from pathlib import Path
+import sys
 from typing import Optional
 
 from pythonjsonlogger import jsonlogger
@@ -42,7 +42,6 @@ class SecurityFilter(logging.Filter):
         "token",
         "secret",
         "encryption_key",
-
         "openai_api_key",
         "linkedin_api_key",
     }
