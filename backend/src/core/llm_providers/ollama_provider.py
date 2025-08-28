@@ -102,11 +102,28 @@ class OllamaProvider(LLMProvider):
         )
 
     def is_available(self) -> bool:
-        """Check if Ollama provider is available by testing connection."""
+        """Check if Ollama provider is available and has required models."""
         try:
+            # First check if Ollama service is running
             with httpx.Client(timeout=5.0) as client:
                 response = client.get(f"{self.base_url}/api/tags")
-                return response.status_code == 200
+                if response.status_code != 200:
+                    return False
+                
+                # Get available models
+                data = response.json()
+                available_models = data.get("models", [])
+                available_model_names = [m["name"] for m in available_models]
+                
+                # Check if at least one of the required models is available
+                required_models = ["gemma3:1b", "llama3.2:1b"]
+                has_required_model = any(model in available_model_names for model in required_models)
+                
+                if not has_required_model:
+                    self.logger.info("Ollama service is running but no required models are downloaded")
+                    return False
+                
+                return True
         except Exception as e:
             self.logger.debug(f"Ollama not available: {e}")
             return False

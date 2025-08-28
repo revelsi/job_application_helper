@@ -6,7 +6,7 @@ import { DocumentUpload } from '@/components/DocumentUpload';
 import { CompactSessionManager } from '@/components/CompactSessionManager';
 import { ApiStatus } from '@/components/ApiStatus';
 import { ApiKeysSetup } from '@/components/ApiKeysSetup';
-import { OllamaModelManager } from '@/components/OllamaModelManager';
+
 import { useApiKeys } from '@/hooks/useApiKeys';
 import { Button } from '@/components/ui/button';
 import { apiClient } from '@/lib/api';
@@ -388,12 +388,7 @@ const Index = () => {
                   />
                 </div>
                 
-                {/* Ollama Model Manager - only show if Ollama is configured */}
-                {apiKeyStatus?.providers?.ollama?.configured && (
-                  <div className="glass rounded-2xl p-6 border-glass-border">
-                    <OllamaModelManager />
-                  </div>
-                )}
+
               </div>
             </TabsContent>
 

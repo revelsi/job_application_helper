@@ -23,6 +23,7 @@ and checking availability.
 
 from typing import List, Optional
 
+import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
@@ -158,31 +159,57 @@ async def check_model_status(model_name: str):
 
 @router.get("/status")
 async def get_ollama_status():
-    """Get overall Ollama service status."""
+    """Get Ollama service status."""
     try:
         provider = get_ollama_provider()
-        is_available = provider.is_available()
         
-        if is_available:
-            models = provider._get_available_models()
+        # Check if Ollama service is running
+        try:
+            with httpx.Client(timeout=5.0) as client:
+                response = client.get(f"{provider.base_url}/api/tags")
+                service_running = response.status_code == 200
+        except Exception:
+            service_running = False
+        
+        if not service_running:
             return {
-                "status": "available",
-                "message": "Ollama service is running",
-                "available_models": len(models),
-                "models": [model["name"] for model in models]
+                "status": "unavailable",
+                "message": "Ollama service is not running. Please start Ollama with 'ollama serve'",
+                "available_models": 0,
+                "models": [],
+                "required_models": ["gemma3:1b", "llama3.2:1b"]
             }
+        
+        # Check if required models are available
+        models = provider._get_available_models()
+        available_model_names = [model["name"] for model in models]
+        required_models = ["gemma3:1b", "llama3.2:1b"]
+        missing_models = [model for model in required_models if model not in available_model_names]
+        
+        if missing_models:
+            return {
+                "status": "unavailable",
+                "message": f"Ollama is running but missing required models: {', '.join(missing_models)}. Run the setup script to download models.",
+                "available_models": len(models),
+                "models": available_model_names,
+                "required_models": required_models,
+                "missing_models": missing_models
+            }
+        
+        # All good
         return {
-            "status": "unavailable",
-            "message": "Ollama service is not available",
-            "available_models": 0,
-            "models": []
+            "status": "available",
+            "message": f"Ollama service is running with {len(models)} models available",
+            "available_models": len(models),
+            "models": available_model_names,
+            "required_models": required_models
         }
-            
     except Exception as e:
         logger.error(f"Failed to get Ollama status: {e}")
         return {
             "status": "error",
             "message": f"Failed to check Ollama status: {e!s}",
             "available_models": 0,
-            "models": []
+            "models": [],
+            "required_models": ["gemma3:1b", "llama3.2:1b"]
         }

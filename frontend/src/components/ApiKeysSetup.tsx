@@ -591,15 +591,13 @@ export const ApiKeysSetup: React.FC<ApiKeysSetupProps> = ({ isOpen, onClose, onS
                       Ollama runs locally and doesn't require an API key. To use Ollama:
                     </p>
                     <ol className="text-sm text-blue-700 space-y-1 list-decimal list-inside ml-4">
-                      <li>Install Ollama from <a href="https://ollama.ai" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-medium">ollama.ai</a></li>
-                      <li>Run <code className="bg-blue-100 px-1 py-0.5 rounded text-xs">ollama serve</code> in your terminal</li>
-                      <li>Models will be downloaded automatically when first used, or you can download them manually:</li>
-                      <ul className="text-sm text-blue-700 space-y-1 list-disc list-inside ml-4">
-                        <li><code className="bg-blue-100 px-1 py-0.5 rounded text-xs">ollama pull gemma3:1b</code></li>
-                        <li><code className="bg-blue-100 px-1 py-0.5 rounded text-xs">ollama pull llama3.2:1b</code></li>
-                      </ul>
+                      <li>Run the setup script: <code className="bg-blue-100 px-1 py-0.5 rounded text-xs">./setup-local-ollama.sh</code></li>
+                      <li>This will install Ollama and download required models automatically</li>
                       <li>Click "Connect to Ollama" below to verify the connection</li>
                     </ol>
+                    <p className="text-sm text-blue-700 mt-2">
+                      <strong>Note:</strong> Ollama will only be available as a provider when required models (gemma3:1b or llama3.2:1b) are downloaded and ready.
+                    </p>
                   </div>
                 </div>
               </div>
