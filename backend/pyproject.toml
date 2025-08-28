@@ -141,6 +141,11 @@ Homepage = "https://github.com/your-username/job-application-helper"
 Repository = "https://github.com/your-username/job-application-helper"
 Issues = "https://github.com/your-username/job-application-helper/issues"
 
+[dependency-groups]
+dev = [
+    "ruff>=0.12.9",
+]
+
 # Tool configurations
 [tool.ruff]
 target-version = "py39"

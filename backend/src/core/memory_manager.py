@@ -447,7 +447,7 @@ class ContextWindowManager:
 
     def __init__(
         self, max_tokens: int = 120000
-    ):  # Updated for GPT-4.1-mini 128K context
+    ):  # Updated for GPT-5-mini 128K context
         """Initialize context window manager."""
         self.max_tokens = max_tokens
         self.system_message_tokens = 500  # Increased reserved space for system messages
@@ -562,7 +562,7 @@ class MemoryManager:
 
     def __init__(
         self, db_path: Optional[Path] = None, max_context_tokens: int = 120000
-    ):  # Updated for GPT-4.1-mini
+    ):  # Updated for GPT-5-mini
         """Initialize memory manager."""
         self.db = MemoryDatabase(db_path)
         self.session_manager = SessionManager(self.db)

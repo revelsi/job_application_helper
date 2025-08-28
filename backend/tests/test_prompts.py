@@ -20,8 +20,8 @@ Tests for the PromptManager.
 Tests prompt template management and dynamic prompt generation.
 """
 
-import tempfile
 from pathlib import Path
+import tempfile
 
 import pytest
 

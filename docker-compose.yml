@@ -1,9 +1,9 @@
 # Job Application Helper - Docker Compose Configuration
-# Multi-container setup for backend and frontend services
+# Multi-container setup for backend and frontend services using UV
 
 services:
   backend:
-    build: 
+    build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: job-helper-backend
@@ -29,15 +29,19 @@ services:
       - DATA_DIR=/app/data
       - DOCUMENTS_PATH=/app/data/documents
       - CACHE_PATH=/app/data/cache
+      # Ollama configuration (point to local Ollama for GPU support)
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - OLLAMA_TIMEOUT=300
+    depends_on: []
     networks:
       - job-helper-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health/"]
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 3
-      start_period: 40s
+      start_period: 30s
 
   frontend:
     build:
@@ -60,7 +64,27 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
+      start_period: 30s
+
+  ollama:
+    image: ollama/ollama:latest
+    platform: linux/arm64
+    container_name: job-helper-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      # Persist Ollama models and data
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_GPU_LAYERS=35
+    # Comment out Ollama service for local development with GPU
+    # Uncomment the ollama service below if you want to use Docker CPU-only Ollama
+    profiles: ["docker-ollama"]
+    networks:
+      - job-helper-network
+    restart: unless-stopped
+
 
 networks:
   job-helper-network:
@@ -73,4 +97,7 @@ volumes:
     name: job-helper-data
   sentence_transformers_cache:
     driver: local
-    name: sentence-transformers-cache 
+    name: sentence-transformers-cache
+  ollama_data:
+    driver: local
+    name: ollama-data

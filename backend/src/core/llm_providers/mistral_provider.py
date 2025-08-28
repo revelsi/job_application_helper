@@ -18,11 +18,10 @@ limitations under the License.
 Mistral LLM Provider Implementation.
 
 Provides integration with Mistral AI API using the unified LLM provider interface.
-Supports reasoning models like Magistral Small with <think></think> output parsing.
+Supports Mistral Small and Medium models with function calling capabilities.
 """
 
 from collections.abc import AsyncGenerator
-import re
 from typing import Any, Dict, List, Optional
 
 try:
@@ -42,11 +41,16 @@ from src.core.llm_providers.base import (
     ProviderCapabilities,
     ProviderType,
 )
+from src.core.llm_providers.model_config import (
+    get_model_config,
+    get_models_for_provider,
+    get_safe_token_limits,
+)
 from src.utils.config import get_settings
 
 
 class MistralProvider(LLMProvider):
-    """Mistral provider implementation with Magistral Small reasoning support."""
+    """Mistral provider implementation with Mistral Small and Medium support."""
 
     def __init__(self, api_key: Optional[str] = None):
         """
@@ -75,18 +79,30 @@ class MistralProvider(LLMProvider):
 
     @property
     def capabilities(self) -> ProviderCapabilities:
-        """Return Mistral provider capabilities optimized for reasoning models."""
+        """Return Mistral provider capabilities based on model configurations."""
+        models = get_models_for_provider("mistral")
+        model_names = [model.name for model in models]
+        
+        # Use default model capabilities as baseline
+        default_config = get_model_config(self.get_default_model())
+        if default_config:
+            return ProviderCapabilities(
+                max_tokens=default_config.max_output_tokens,
+                supports_streaming=default_config.supports_streaming,
+                supports_function_calling=default_config.supports_function_calling,
+                rate_limit_per_minute=default_config.rate_limit_rpm,
+                cost_per_1k_tokens=default_config.cost_per_1k_input_tokens,
+                models=model_names,
+            )
+        
+        # Fallback if model config not found
         return ProviderCapabilities(
-            max_tokens=32768,  # Magistral Small max output tokens
-            supports_streaming=True,  # Streaming now supported for reasoning models
-            supports_function_calling=False,  # Function calling not supported yet
-            rate_limit_per_minute=60,  # Conservative estimate
-            cost_per_1k_tokens=0.0002,  # Estimated cost per 1k tokens
-            models=[
-                "magistral-small-2506",
-                "magistral-medium-2506",
-                "mistral-small-2506",  # Lightweight model for classification tasks
-            ],
+            max_tokens=8192,
+            supports_streaming=True,
+            supports_function_calling=True,
+            rate_limit_per_minute=60,
+            cost_per_1k_tokens=0.0002,
+            models=model_names,
         )
 
     def is_available(self) -> bool:
@@ -99,8 +115,8 @@ class MistralProvider(LLMProvider):
         )
 
     def get_default_model(self) -> str:
-        """Get the default Mistral model - Magistral Small for reasoning."""
-        return "magistral-small-2506"
+        """Get the default Mistral model - mistral-small-latest."""
+        return "mistral-small-latest"
 
     @property
     def client(self) -> Mistral:
@@ -116,8 +132,7 @@ class MistralProvider(LLMProvider):
         """Build messages in Mistral format."""
         messages = []
 
-        # For reasoning models, we let Mistral handle the system prompt
-        # by using prompt_mode="reasoning", but we can add context in user message
+        # For Mistral models, we build context in the user message
 
         # Build user message with context if provided
         user_content = ""
@@ -132,12 +147,14 @@ class MistralProvider(LLMProvider):
             if context_parts:
                 user_content += "Context:\n" + "\n".join(context_parts) + "\n\n"
 
-        # Add main prompt - let the reasoning model work naturally
+        # Add main prompt
         user_content += request.prompt
 
         messages.append({"role": "user", "content": user_content})
 
         return messages
+
+
 
     def _make_api_call(
         self,
@@ -145,16 +162,27 @@ class MistralProvider(LLMProvider):
         model: str,
         max_tokens: int,
         temperature: float,
+        reasoning_effort: Optional[str] = None,
+        verbosity: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Make API call to Mistral."""
         try:
-            response = self.client.chat.complete(
-                model=model,
-                messages=messages,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                prompt_mode="reasoning",  # Enable reasoning mode for <think></think> output
-            )
+            # Build API call parameters based on official documentation
+            api_params = {
+                "model": model,
+                "messages": messages,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "stream": False,
+            }
+
+            # Note: reasoning_effort and verbosity parameters are ignored as Mistral doesn't support these features
+            if reasoning_effort:
+                self.logger.debug(f"Ignoring reasoning_effort '{reasoning_effort}' - not supported by Mistral")
+            if verbosity:
+                self.logger.debug(f"Ignoring verbosity '{verbosity}' - not supported by Mistral")
+
+            response = self.client.chat.complete(**api_params)
             return response
         except Exception as e:
             self.logger.error(f"Mistral API call failed: {e}")
@@ -166,73 +194,30 @@ class MistralProvider(LLMProvider):
         model: str,
         max_tokens: int,
         temperature: float,
+        reasoning_effort: Optional[str] = None,
     ):
         """Make streaming API call to Mistral."""
         try:
-            stream = self.client.chat.stream(
-                model=model,
-                messages=messages,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                prompt_mode="reasoning",  # Enable reasoning mode for <think></think> output
-            )
+            # Build API call parameters based on official documentation
+            api_params = {
+                "model": model,
+                "messages": messages,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "stream": True,
+            }
+
+
+
+            stream = self.client.chat.stream(**api_params)
             return stream
         except Exception as e:
             self.logger.error(f"Mistral streaming API call failed: {e}")
             raise
 
-    def _parse_reasoning_response(self, content: str) -> tuple[str, str]:
-        """
-        Parse reasoning response to extract thinking and final answer.
 
-        Args:
-            content: Raw response content with <think></think> tags
 
-        Returns:
-            Tuple of (reasoning_trace, final_answer)
-        """
-        # Extract thinking section
-        think_pattern = r"<think>(.*?)</think>"
-        think_match = re.search(think_pattern, content, re.DOTALL)
 
-        if think_match:
-            reasoning_trace = think_match.group(1).strip()
-            # Extract final answer (everything after </think>)
-            raw_answer = content[think_match.end() :].strip()
-
-            # Clean up the final answer by extracting only the final answer section if present
-            final_answer = self._extract_final_answer(raw_answer)
-        else:
-            # Fallback: if no thinking tags, treat entire content as final answer
-            reasoning_trace = ""
-            final_answer = self._extract_final_answer(content.strip())
-
-        return reasoning_trace, final_answer
-
-    def _extract_final_answer(self, content: str) -> str:
-        """Pass through content as-is - let the model output naturally."""
-        return content.strip()
-
-    def _extract_boxed_content(self, text: str) -> tuple[str, str]:
-        """
-        Extract content from \boxed{} as the final answer.
-
-        Returns:
-            Tuple of (remaining_text, boxed_content)
-        """
-        import re
-
-        # Look for \boxed{...} pattern
-        boxed_pattern = r"\\boxed\{([^}]*)\}"
-        match = re.search(boxed_pattern, text)
-
-        if match:
-            boxed_content = match.group(1)
-            # Remove the \boxed{} from the text
-            remaining_text = re.sub(boxed_pattern, "", text).strip()
-            return remaining_text, boxed_content
-
-        return text, ""
 
     def _parse_response(
         self, response: Dict[str, Any]
@@ -240,16 +225,8 @@ class MistralProvider(LLMProvider):
         """Parse Mistral response into (content, tokens_used, request_id)."""
         raw_content = response.choices[0].message.content
 
-        # Parse reasoning vs final answer
-        reasoning_trace, final_answer = self._parse_reasoning_response(raw_content)
-
-        # For now, return the final answer as the main content
-        # In the future, we could modify the response format to include reasoning
-        content = final_answer
-
-        # Add reasoning trace as a comment for debugging (optional)
-        if reasoning_trace and len(reasoning_trace) > 0:
-            self.logger.debug(f"Reasoning trace: {reasoning_trace[:200]}...")
+        # Return the content as-is
+        content = raw_content
 
         tokens_used = (
             getattr(response.usage, "total_tokens", 0)
@@ -264,18 +241,14 @@ class MistralProvider(LLMProvider):
         self, request: GenerationRequest, timeout: float = 30.0
     ) -> AsyncGenerator[str, None]:
         """
-        Generate content using streaming for reasoning models.
-
-        Implements the desired UX flow:
-        - Shows thinking process as it streams (with special markers)
-        - Hides thinking and shows final answer when </think> is reached
+        Generate content using streaming.
 
         Args:
             request: Generation request with prompt and parameters.
             timeout: Request timeout in seconds.
 
         Yields:
-            JSON-formatted chunks with type information for proper UX flow.
+            Content chunks as they are generated.
         """
         try:
             # Check availability
@@ -288,9 +261,12 @@ class MistralProvider(LLMProvider):
             # Build messages and parameters
             messages = self._build_messages(request)
             model = request.model or self.get_default_model()
-            max_tokens = request.max_tokens or self.capabilities.max_tokens
+            
+            # Get safe token limits for this specific model
+            token_limits = get_safe_token_limits(model, request.max_tokens)
+            max_tokens = request.max_tokens or token_limits["recommended_output"]
 
-            self.logger.info(f"Starting Mistral streaming with model: {model}")
+            self.logger.info(f"Starting Mistral streaming with model: {model} (max_tokens: {max_tokens})")
 
             # Make streaming API call
             stream = self._make_streaming_api_call(
@@ -300,14 +276,7 @@ class MistralProvider(LLMProvider):
                 temperature=request.temperature,
             )
 
-            # Track reasoning vs final answer state
-            buffer = ""
-            in_thinking = False
-            thinking_complete = False
-            thinking_content = ""
-            final_answer = ""  # Accumulate final answer content (don't stream it)
-
-            # Process stream chunks - SIMPLE APPROACH
+            # Process stream chunks
             for chunk in stream:
                 if (
                     hasattr(chunk, "data")
@@ -317,72 +286,7 @@ class MistralProvider(LLMProvider):
                     if chunk.data.choices and len(chunk.data.choices) > 0:
                         delta = chunk.data.choices[0].delta
                         if hasattr(delta, "content") and delta.content:
-                            content_chunk = delta.content
-                            buffer += content_chunk
-
-                            # Handle <think> tag detection
-                            if (
-                                not in_thinking
-                                and not thinking_complete
-                                and "<think>" in buffer
-                            ):
-                                in_thinking = True
-                                # Remove everything up to and including <think>
-                                buffer = buffer.split("<think>", 1)[-1]
-                                continue
-
-                            # Handle </think> tag detection
-                            if in_thinking and "</think>" in buffer:
-                                # Extract thinking content before </think>
-                                parts = buffer.split("</think>", 1)
-                                thinking_content += parts[0]
-                                # Signal thinking is complete
-                                yield '{"type":"thinking_complete"}'
-                                in_thinking = False
-                                thinking_complete = True
-                                # Start accumulating final answer content
-                                final_answer = parts[1] if len(parts) > 1 else ""
-                                continue
-
-                            # Yield content based on current state
-                            if in_thinking:
-                                # Stream thinking content as it arrives
-                                import json
-
-                                yield json.dumps(
-                                    {"type": "thinking", "content": content_chunk}
-                                )
-                            elif thinking_complete:
-                                # Accumulate final answer content (don't stream it)
-                                final_answer += content_chunk
-                            elif (
-                                not in_thinking
-                                and len(buffer) > 50
-                                and "<think>" not in buffer
-                            ):
-                                # No thinking detected - accumulate everything as final answer
-                                thinking_complete = True
-                                final_answer += buffer
-                                buffer = ""
-
-            # After streaming is complete, process and send the final answer
-            if final_answer.strip():
-                # Check if there's boxed content to extract
-                remaining_text, boxed_content = self._extract_boxed_content(
-                    final_answer
-                )
-
-                import json
-
-                if boxed_content:
-                    # Send the content before the boxed part
-                    if remaining_text.strip():
-                        yield json.dumps({"type": "answer", "content": remaining_text})
-                    # Send the boxed content as final answer
-                    yield json.dumps({"type": "final_answer", "content": boxed_content})
-                else:
-                    # No boxed content, send everything as regular answer
-                    yield json.dumps({"type": "answer", "content": final_answer})
+                            yield delta.content
 
         except Exception as e:
             self.logger.error(f"Mistral streaming generation failed: {e}")

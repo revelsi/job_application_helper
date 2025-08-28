@@ -22,12 +22,9 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from src.api.models import ChatRequest, ChatResponse
-from src.core.llm_providers.factory import get_default_provider
-from src.core.memory_manager import MemoryManager
-from src.core.simple_chat_controller import (
-    SimpleChatController,
-    create_simple_chat_controller,
-)
+from src.core.llm_providers.base import ProviderType
+from src.core.llm_providers.factory import get_llm_provider
+from src.core.simple_chat_controller import SimpleChatController
 from src.utils.logging import get_logger
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -35,55 +32,64 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 logger = get_logger(__name__)
 
 
+@router.get("/test")
+async def test_endpoint():
+    """Test endpoint to verify chat router is working."""
+    logger.info("🧪 Test endpoint called")
+    return {"status": "ok", "message": "Chat router is working"}
+
+
+def get_provider_for_request(request: ChatRequest):
+    """Get the appropriate LLM provider based on request parameters."""
+    if not request.provider:
+        raise ValueError("Provider must be specified in the request")
+    
+    # Map provider string to ProviderType
+    provider_mapping = {
+        "openai": ProviderType.OPENAI,
+        "mistral": ProviderType.MISTRAL,
+        "novita": ProviderType.NOVITA,
+        "ollama": ProviderType.OLLAMA,
+    }
+    
+    if request.provider not in provider_mapping:
+        raise ValueError(f"Unsupported provider: {request.provider}")
+    
+    try:
+        provider_type = provider_mapping[request.provider]
+        provider = get_llm_provider(provider_type)
+        logger.info(f"🎯 Using requested provider: {request.provider}")
+        return provider
+    except Exception as e:
+        logger.error(f"❌ Failed to get requested provider {request.provider}: {e}")
+        raise ValueError(f"Provider {request.provider} is not available: {e}")
+
+
 def get_chat_controller() -> SimpleChatController:
     """Dependency to get simplified chat controller instance."""
     logger.info("🚀 Starting simplified chat controller initialization...")
+    logger.info("🔧 This is the get_chat_controller dependency function")
 
     try:
-        # Initialize LLM provider
-        logger.info("🔧 Initializing LLM provider...")
+        # Initialize document service
+        logger.info("📄 Initializing document service...")
+        from src.core.simple_document_service import get_simple_document_service
+        document_service = get_simple_document_service()
 
-        # Get fresh API key status to ensure we have the latest configuration
-        from src.core.llm_providers.factory import get_api_key_manager
-
-        key_manager = get_api_key_manager()
-        config_status = key_manager.list_configured_providers()
-        logger.debug(f"📊 Current provider configuration status: {config_status}")
-
-        # Try to get a fresh provider instance
-        llm_provider = None
-        try:
-            llm_provider = get_default_provider()
-            logger.info(f"✅ LLM provider initialized: {type(llm_provider).__name__}")
-            logger.debug(f"📊 LLM provider details: {llm_provider.get_default_model()}")
-        except ValueError as e:
-            logger.warning(f"❌ No LLM provider available: {e}")
-            # Continue without LLM provider (demo mode)
-            llm_provider = None
-
-        # Initialize memory manager
-        logger.info("🧠 Initializing memory manager...")
-        memory_manager = MemoryManager()
-        logger.info("✅ Memory manager initialized")
-
-        # Create simplified chat controller
-        controller = create_simple_chat_controller(
-            llm_provider=llm_provider,
-            memory_manager=memory_manager,
+        # Initialize chat controller without a default LLM provider
+        logger.info("💬 Initializing chat controller...")
+        from src.core.simple_chat_controller import SimpleChatController
+        chat_controller = SimpleChatController(
+            llm_provider=None,  # No default provider - will be set per request
+            document_service=document_service,
         )
 
-        logger.info(
-            f"🎉 Simplified chat controller created successfully - "
-            f"LLM: {controller.llm_available}, "
-            f"Memory: {controller.memory_available}, "
-            f"Documents: {controller.documents_available}"
-        )
-        return controller
+        logger.info("✅ Chat controller initialization completed successfully")
+        return chat_controller
 
     except Exception as e:
-        logger.error(f"💥 Failed to initialize chat controller: {e}")
-        # Return a basic controller even on failure
-        return create_simple_chat_controller()
+        logger.error(f"❌ Chat controller initialization failed: {e}")
+        raise
 
 
 @router.post("/complete", response_model=ChatResponse)
@@ -91,61 +97,38 @@ async def chat_complete(
     request: ChatRequest,
     chat_controller: SimpleChatController = Depends(get_chat_controller),
 ):
-    """Process chat message using the simplified chat controller."""
-    logger.info("💬 Received chat completion request")
-    logger.debug(
-        f"📝 Message: {request.message[:100]}{'...' if len(request.message) > 100 else ''}"
-    )
-    logger.debug(f"🔗 Session ID: {request.session_id}")
-
+    """Complete chat endpoint with document context."""
     try:
-        logger.info("🔄 Processing chat message...")
-
-        # Convert Pydantic model to dict for history
-        history = (
-            [msg.dict() for msg in request.conversation_history]
-            if request.conversation_history
-            else None
-        )
-
-        logger.debug(
-            f"📚 Conversation history: {len(history) if history else 0} messages"
-        )
-        logger.debug(
-            f"🤖 Controller status - LLM: {chat_controller.llm_available}, "
-            f"Memory: {chat_controller.memory_available}, "
-            f"Documents: {chat_controller.documents_available}"
-        )
-
-        # Use simplified chat controller
-        chat_response = chat_controller.process_message(
+        # Get the provider for this request
+        llm_provider = get_provider_for_request(request)
+        
+        # Process the message with the specific provider
+        response = chat_controller.process_message(
             message=request.message,
-            conversation_history=history,
+            llm_provider=llm_provider,
+            conversation_history=request.conversation_history,
             session_id=request.session_id,
+            model=request.model,
+            reasoning_effort=request.reasoning_effort,
         )
 
-        logger.info(f"✅ Chat response generated - success: {chat_response.success}")
-        logger.debug(f"📊 Response length: {len(chat_response.content)} characters")
-        logger.debug(f"📈 Metadata: {chat_response.metadata}")
-
-        if not chat_response.success:
-            logger.error(f"❌ Chat processing failed: {chat_response.error}")
-
-        # Convert SimpleChatResponse to API response
-        api_response = ChatResponse(
-            response=chat_response.content,
-            session_id=chat_controller.current_session_id or "no_session",
-            success=chat_response.success,
-            error=chat_response.error,
-            metadata=chat_response.metadata or {},
+        return ChatResponse(
+            response=response.content,
+            session_id=response.session_id or request.session_id or "default",
+            success=response.success,
+            error=response.error,
+            metadata=response.metadata,
         )
-
-        logger.info("📤 Sending chat response")
-        return api_response
 
     except Exception as e:
-        logger.error(f"💥 Error in chat_complete: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"❌ Chat completion failed: {e}")
+        return ChatResponse(
+            response="",
+            session_id=request.session_id or "error",
+            success=False,
+            error=str(e),
+            metadata={},
+        )
 
 
 @router.post("/stream")
@@ -153,65 +136,44 @@ async def chat_stream(
     request: ChatRequest,
     chat_controller: SimpleChatController = Depends(get_chat_controller),
 ):
-    """Process chat message with streaming response."""
-    logger.info("💬 Received chat streaming request")
-    logger.debug(
-        f"📝 Message: {request.message[:100]}{'...' if len(request.message) > 100 else ''}"
-    )
-    logger.debug(f"🔗 Session ID: {request.session_id}")
-
+    """Streaming chat endpoint with document context."""
+    logger.info(f"🎯 Chat stream endpoint called with provider: {request.provider}, model: {request.model}")
     async def generate_stream():
         try:
-            logger.info("🔄 Processing chat message with streaming...")
-
-            # Convert Pydantic model to dict for history
-            history = (
-                [msg.dict() for msg in request.conversation_history]
-                if request.conversation_history
-                else None
-            )
-
-            logger.debug(
-                f"📚 Conversation history: {len(history) if history else 0} messages"
-            )
-            logger.debug(
-                f"🤖 Controller status - LLM: {chat_controller.llm_available}, "
-                f"Memory: {chat_controller.memory_available}, "
-                f"Documents: {chat_controller.documents_available}"
-            )
-
-            # Use simplified chat controller's streaming method
+            # Send initial processing indicator
+            yield f"data: {json.dumps({'type': 'processing', 'content': 'Processing your request...'})}\n\n"
+            
+            logger.info(f"🔍 Getting provider for request: {request.provider}")
+            # Get the provider for this request
+            llm_provider = get_provider_for_request(request)
+            logger.info(f"✅ Got provider: {llm_provider.provider_type}")
+            
+            # Accumulate the complete response
+            complete_response = ""
+            
+            # Process the message with the specific provider
+            logger.info("🚀 Starting chat_controller.process_message_stream...")
             async for chunk in chat_controller.process_message_stream(
                 message=request.message,
-                conversation_history=history,
+                llm_provider=llm_provider,
+                conversation_history=request.conversation_history,
                 session_id=request.session_id,
+                model=request.model,
+                reasoning_effort=request.reasoning_effort,
             ):
-                # Check if chunk is already structured JSON (from Mistral provider)
-                try:
-                    # Try to parse chunk as JSON to see if it's structured
-                    parsed_chunk = json.loads(chunk)
-                    if isinstance(parsed_chunk, dict) and "type" in parsed_chunk:
-                        # This is structured format from Mistral - send as string for frontend to parse
-                        yield f"data: {json.dumps(chunk)}\n\n"
-                    else:
-                        # Regular content - wrap in old format for backward compatibility
-                        yield f"data: {json.dumps({'chunk': chunk, 'session_id': chat_controller.current_session_id or 'no_session'})}\n\n"
-                except json.JSONDecodeError:
-                    # Not JSON - wrap in old format for backward compatibility (OpenAI style)
-                    yield f"data: {json.dumps({'chunk': chunk, 'session_id': chat_controller.current_session_id or 'no_session'})}\n\n"
-
-            # Send end marker
-            yield f"data: {json.dumps({'done': True, 'session_id': chat_controller.current_session_id or 'no_session'})}\n\n"
+                logger.debug(f"📦 Chat endpoint received chunk: {chunk[:50]}...")
+                complete_response += chunk
+                yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
+            
+            # Send final complete answer
+            yield f"data: {json.dumps({'type': 'answer', 'content': complete_response})}\n\n"
+            yield "data: [DONE]\n\n"
 
         except Exception as e:
-            logger.error(f"💥 Error in chat_stream: {e}")
-            error_data = {
-                "error": str(e),
-                "session_id": chat_controller.current_session_id or "no_session",
-            }
-            yield f"data: {json.dumps(error_data)}\n\n"
-
-    return StreamingResponse(generate_stream(), media_type="text/plain")
+            logger.error(f"❌ Chat streaming failed: {e}")
+            yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
+    
+    return StreamingResponse(generate_stream(), media_type="text/event-stream")
 
 
 class ClearSessionRequest(BaseModel):

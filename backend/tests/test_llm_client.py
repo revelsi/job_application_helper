@@ -75,7 +75,7 @@ class TestProviderArchitecture:
         assert provider.provider_type == ProviderType.OPENAI
         assert provider.is_available()
         assert isinstance(provider.capabilities, ProviderCapabilities)
-        assert provider.get_default_model() == "gpt-4.1-mini"
+        assert provider.get_default_model() == "gpt-5-mini"
 
     @patch("src.core.llm_providers.openai_provider.OpenAI")
     def test_openai_provider_content_generation(self, mock_openai_class):
@@ -236,7 +236,7 @@ class TestProviderArchitecture:
         # Clear all environment variables and mock the key manager to return None
         env_vars_to_clear = ["OPENAI_API_KEY"]
 
-        with patch.dict("os.environ", {k: "" for k in env_vars_to_clear}, clear=False):
+        with patch.dict("os.environ", dict.fromkeys(env_vars_to_clear, ""), clear=False):
             with patch(
                 "src.core.llm_providers.factory.get_api_key_manager"
             ) as mock_key_manager:

@@ -12,6 +12,8 @@ interface ApiKeyStatus {
   providers: {
     openai: ProviderStatus;
     mistral: ProviderStatus;
+    novita: ProviderStatus;
+    ollama: ProviderStatus;
   };
   has_any_configured: boolean;
   has_env_configured: boolean;

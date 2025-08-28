@@ -43,7 +43,7 @@ router = APIRouter(prefix="/api/keys", tags=["api-keys"])
 class APIKeyRequest(BaseModel):
     """Request model for setting API keys."""
 
-    provider: str = Field(..., description="Provider name (openai, mistral)")
+    provider: str = Field(..., description="Provider name (openai, mistral, huggingface, ollama)")
     api_key: str = Field(..., description="API key for the provider")
 
 
@@ -142,10 +142,10 @@ async def set_api_key(request: APIKeyRequest):
         key_manager = get_api_key_manager()
 
         # Validate provider
-        if request.provider not in ["openai", "mistral"]:
+        if request.provider not in ["openai", "mistral", "novita", "ollama"]:
             raise HTTPException(
                 status_code=400,
-                detail="Invalid provider. Supported: openai, mistral",
+                detail="Invalid provider. Supported: openai, mistral, novita, ollama",
             )
 
         # Validate API key format
@@ -154,6 +154,17 @@ async def set_api_key(request: APIKeyRequest):
                 status_code=400,
                 detail="Invalid OpenAI API key format. Should start with 'sk-'",
             )
+        
+        if request.provider == "novita" and len(request.api_key.strip()) == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid Novita API key format. Please provide a valid API key.",
+            )
+        
+        if request.provider == "ollama":
+            # Ollama doesn't use API keys, but we can accept any value for consistency
+            # The actual availability is checked by connection test
+            pass
 
         # Store the API key
         success = key_manager.set_api_key(request.provider, request.api_key)
@@ -192,10 +203,10 @@ async def remove_api_key(provider: str):
         key_manager = get_api_key_manager()
 
         # Validate provider
-        if provider not in ["openai", "mistral"]:
+        if provider not in ["openai", "mistral", "novita", "ollama"]:
             raise HTTPException(
                 status_code=400,
-                detail="Invalid provider. Supported: openai, mistral",
+                detail="Invalid provider. Supported: openai, mistral, novita, ollama",
             )
 
         # Remove the API key
@@ -235,10 +246,10 @@ async def test_api_key(provider: str):
         key_manager = get_api_key_manager()
 
         # Validate provider
-        if provider not in ["openai", "mistral"]:
+        if provider not in ["openai", "mistral", "novita", "ollama"]:
             raise HTTPException(
                 status_code=400,
-                detail="Invalid provider. Supported: openai, mistral",
+                detail="Invalid provider. Supported: openai, mistral, novita, ollama",
             )
 
         # Get the API key
@@ -256,6 +267,10 @@ async def test_api_key(provider: str):
             provider_type = ProviderType.OPENAI
         elif provider == "mistral":
             provider_type = ProviderType.MISTRAL
+        elif provider == "novita":
+            provider_type = ProviderType.NOVITA
+        elif provider == "ollama":
+            provider_type = ProviderType.OLLAMA
         else:
             raise HTTPException(
                 status_code=400, detail=f"Unsupported provider: {provider}"

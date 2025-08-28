@@ -25,9 +25,9 @@ This module tests:
 - Memory cleanup and statistics
 """
 
-import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
+import tempfile
 from unittest.mock import Mock, patch
 
 import pytest

@@ -29,11 +29,9 @@ This script performs thorough checks of your system:
 """
 
 import importlib.util
-import os
-import subprocess
-import sys
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+import sys
+from typing import List, Tuple
 
 
 class SystemChecker:
@@ -63,13 +61,12 @@ class SystemChecker:
                 f"Python {version.major}.{version.minor}.{version.micro}",
             )
             return True
-        else:
-            self.log_result(
-                "Python Version",
-                False,
-                f"Python {version.major}.{version.minor}.{version.micro} - Need 3.9+",
-            )
-            return False
+        self.log_result(
+            "Python Version",
+            False,
+            f"Python {version.major}.{version.minor}.{version.micro} - Need 3.9+",
+        )
+        return False
 
     def check_virtual_environment(self) -> bool:
         """Check if we're in a virtual environment."""
@@ -91,16 +88,14 @@ class SystemChecker:
                     "Project Virtual Environment", True, "Using project venv"
                 )
                 return True
-            else:
-                self.log_result(
-                    "Project Virtual Environment",
-                    False,
-                    f"Using different venv: {venv_path}",
-                )
-                return False
-        else:
-            self.log_result("Virtual Environment", False, "Not in virtual environment")
+            self.log_result(
+                "Project Virtual Environment",
+                False,
+                f"Using different venv: {venv_path}",
+            )
             return False
+        self.log_result("Virtual Environment", False, "Not in virtual environment")
+        return False
 
     def check_dependencies(self) -> bool:
         """Check all required dependencies."""
@@ -257,9 +252,7 @@ class SystemChecker:
         try:
             # Check module imports
             from src.core.document_processor import (
-                DocumentContent,
                 DocumentProcessor,
-                extract_text_from_file,
             )
 
             self.log_result(
@@ -361,13 +354,12 @@ class SystemChecker:
                 "Environment Variables", False, f"Missing: {', '.join(missing_vars)}"
             )
             return False
-        else:
-            self.log_result(
-                "Environment Variables",
-                True,
-                f"All {len(required_vars)} variables present",
-            )
-            return True
+        self.log_result(
+            "Environment Variables",
+            True,
+            f"All {len(required_vars)} variables present",
+        )
+        return True
 
     def check_git_setup(self) -> bool:
         """Check git setup and .gitignore."""
@@ -398,11 +390,10 @@ class SystemChecker:
                 "Git Ignore Patterns", False, f"Missing: {', '.join(missing_patterns)}"
             )
             return False
-        else:
-            self.log_result(
-                "Git Ignore Patterns", True, "All important patterns present"
-            )
-            return True
+        self.log_result(
+            "Git Ignore Patterns", True, "All important patterns present"
+        )
+        return True
 
     def check_requirements_files(self) -> bool:
         """Check requirements files are properly formatted."""

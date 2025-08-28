@@ -23,13 +23,12 @@ is resolved.
 """
 
 import unittest
-from unittest.mock import Mock, patch, MagicMock
-from typing import Dict, Any, List
+from unittest.mock import Mock, patch
 
-from src.core.simple_chat_controller import SimpleChatController
-from src.core.query_analyzer import QueryAnalyzer, QueryAnalysis
 from src.core.llm_providers.base import ContentType, GenerationResponse
 from src.core.memory_manager import MemoryManager
+from src.core.query_analyzer import QueryAnalysis, QueryAnalyzer
+from src.core.simple_chat_controller import SimpleChatController
 
 
 class TestQueryAnalyzerIntegration(unittest.TestCase):
@@ -60,9 +59,9 @@ class TestQueryAnalyzerIntegration(unittest.TestCase):
         # Verify QueryAnalyzer is created and available
         self.assertIsNotNone(self.chat_controller.query_analyzer)
         self.assertIsInstance(self.chat_controller.query_analyzer, QueryAnalyzer)
-        self.assertTrue(hasattr(self.chat_controller, 'query_analyzer_available'))
+        self.assertTrue(hasattr(self.chat_controller, "query_analyzer_available"))
     
-    @patch('src.core.simple_chat_controller.get_simple_document_service')
+    @patch("src.core.simple_chat_controller.get_simple_document_service")
     def test_query_analysis_in_process_message(self, mock_doc_service):
         """Test that query analysis is called during message processing."""
         # Mock document service
@@ -85,7 +84,7 @@ class TestQueryAnalyzerIntegration(unittest.TestCase):
             reasoning="Clear cover letter request"
         )
         
-        with patch.object(self.chat_controller.query_analyzer, 'analyze_query', return_value=mock_analysis) as mock_analyze:
+        with patch.object(self.chat_controller.query_analyzer, "analyze_query", return_value=mock_analysis) as mock_analyze:
             # Process a test message
             response = self.chat_controller.process_message("Write me a cover letter for TestCorp")
             
@@ -126,8 +125,8 @@ class TestQueryAnalyzerIntegration(unittest.TestCase):
     def test_document_weighting_integration(self):
         """Test dynamic document weighting based on query analysis."""
         # Mock document service
-        with patch.object(self.chat_controller, 'documents_available', True):
-            with patch.object(self.chat_controller.document_service, 'get_relevant_context') as mock_get_context:
+        with patch.object(self.chat_controller, "documents_available", True):
+            with patch.object(self.chat_controller.document_service, "get_relevant_context") as mock_get_context:
                 mock_get_context.return_value = {
                     "has_context": True,
                     "context_text": "Test context",
@@ -153,15 +152,15 @@ class TestQueryAnalyzerIntegration(unittest.TestCase):
                 
                 # Check that limits were calculated based on weights
                 # Base length 100000 * 0.7 = 70000 for candidate
-                self.assertEqual(call_kwargs['max_candidate_doc_length'], 70000)
-                self.assertEqual(call_kwargs['max_job_doc_length'], 20000)
-                self.assertEqual(call_kwargs['max_company_doc_length'], 10000)
+                self.assertEqual(call_kwargs["max_candidate_doc_length"], 70000)
+                self.assertEqual(call_kwargs["max_job_doc_length"], 20000)
+                self.assertEqual(call_kwargs["max_company_doc_length"], 10000)
     
     def test_fallback_when_query_analyzer_fails(self):
         """Test graceful fallback when QueryAnalyzer fails."""
         # Mock query analyzer to raise an exception
-        with patch.object(self.chat_controller.query_analyzer, 'analyze_query', side_effect=Exception("Analysis failed")):
-            with patch.object(self.chat_controller, 'documents_available', False):
+        with patch.object(self.chat_controller.query_analyzer, "analyze_query", side_effect=Exception("Analysis failed")):
+            with patch.object(self.chat_controller, "documents_available", False):
                 # Should not raise exception and should continue processing
                 response = self.chat_controller.process_message("Test message")
                 
@@ -191,7 +190,7 @@ class TestQueryAnalyzerIntegration(unittest.TestCase):
                 query_analysis=analysis
             )
             
-            self.assertEqual(content_type, expected_content_type, 
+            self.assertEqual(content_type, expected_content_type,
                            f"Intent {intent_type} should map to {expected_content_type}")
     
     def test_query_analyzer_availability_flag(self):
@@ -211,5 +210,5 @@ class TestQueryAnalyzerIntegration(unittest.TestCase):
         self.assertFalse(self.chat_controller.query_analyzer_available)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

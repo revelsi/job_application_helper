@@ -1,10 +1,14 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, User, Bot, Download, ChevronDown, Sparkles, MessageSquare, Trash2 } from 'lucide-react';
+import { Send, User, Bot, Download, ChevronDown, Sparkles, MessageSquare, Trash2, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { apiClient } from '@/lib/api';
+import { useApiKeys } from '@/hooks/useApiKeys';
 
 interface Message {
   id: string;
@@ -47,9 +51,60 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSendMessage, isL
   const [showThinking, setShowThinking] = useState(false);
   const [thinkingExpanded, setThinkingExpanded] = useState(true);
   const [currentAiMessageId, setCurrentAiMessageId] = useState<string>('');
+  const [selectedProvider, setSelectedProvider] = useState<string>('');
+  const [selectedModel, setSelectedModel] = useState<string>('');
+  const [reasoningEffort, setReasoningEffort] = useState<string>('medium');
+  
+  // Check if current model supports reasoning effort
+  const supportsReasoningEffort = (model: string) => {
+    const reasoningModels = ['gpt-5-mini']; // Only OpenAI models support reasoning
+    return reasoningModels.includes(model);
+  };
+
+  // Check if model supports reasoning levels (OpenAI)
+  const supportsReasoningLevels = (model: string) => {
+    const levelModels = ['gpt-5-mini']; // OpenAI models with levels
+    return levelModels.includes(model);
+  };
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const thinkingContentRef = useRef<HTMLDivElement>(null);
+
+  // Get API keys status to show available providers
+  const { apiKeyStatus } = useApiKeys();
+
+  // Get available providers (only configured ones)
+  const getAvailableProviders = () => {
+    if (!apiKeyStatus?.providers) return [];
+    
+    const providers = [
+      { key: 'openai', name: 'OpenAI', models: ['gpt-5-mini'] },
+      { key: 'mistral', name: 'Mistral', models: ['mistral-small-latest', 'mistral-medium-latest'] },
+      { key: 'novita', name: 'Novita', models: ['openai/gpt-oss-20b', 'qwen/qwen3-32b-fp8', 'zai-org/glm-4.5'] },
+      { key: 'ollama', name: 'Ollama (Local)', models: ['gemma3:1b', 'llama3.2:1b'] },
+    ];
+
+    return providers.filter(provider => 
+      apiKeyStatus.providers[provider.key as keyof typeof apiKeyStatus.providers]?.configured
+    );
+  };
+
+  const availableProviders = getAvailableProviders();
+
+  // Initialize default provider/model selection
+  useEffect(() => {
+    if (availableProviders.length > 0 && !selectedProvider) {
+      const firstProvider = availableProviders[0];
+      setSelectedProvider(firstProvider.key);
+      setSelectedModel(firstProvider.models[0]);
+    }
+  }, [availableProviders.length, selectedProvider]);
+
+  // Update available models when provider changes
+  const getAvailableModels = () => {
+    const provider = availableProviders.find(p => p.key === selectedProvider);
+    return provider?.models || [];
+  };
 
   // Initialize session ID on component mount
   useEffect(() => {
@@ -119,11 +174,20 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSendMessage, isL
 
     try {
       // Use secure API client for streaming
-      const reader = await apiClient.stream('/chat/stream', {
+      const requestData: any = {
         message: messageToSend,
         session_id: sessionId, // Use the generated session ID
-        conversation_history: messages.slice(-10) // Send last 10 messages for context
-      });
+        conversation_history: messages.slice(-10), // Send last 10 messages for context
+        provider: selectedProvider, // Send selected provider
+        model: selectedModel, // Send selected model
+      };
+      
+      // Send reasoning_effort for models that support it
+      if (supportsReasoningEffort(selectedModel)) {
+        requestData.reasoning_effort = reasoningEffort;
+      }
+      
+      const reader = await apiClient.stream('/chat/stream', requestData);
 
       if (!reader) {
         throw new Error('No response body reader available');
@@ -511,6 +575,87 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSendMessage, isL
         >
           <ChevronDown className="h-5 w-5 text-white" />
         </Button>
+      )}
+
+      {/* Provider/Model Selection */}
+      {hasApiKeys && availableProviders.length > 0 && (
+        <div className="px-6 py-3 border-t border-glass-border bg-white/20 backdrop-blur-sm">
+          <div className="flex items-center gap-3">
+            <Settings className="h-4 w-4 text-muted-foreground" />
+            <div className="flex items-center gap-3 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Provider:</span>
+                <Select 
+                  value={selectedProvider} 
+                  onValueChange={(value) => {
+                    setSelectedProvider(value);
+                    const provider = availableProviders.find(p => p.key === value);
+                    if (provider) {
+                      setSelectedModel(provider.models[0]);
+                    }
+                  }}
+                >
+                  <SelectTrigger className="w-32 h-8 text-xs">
+                    <SelectValue placeholder="Provider" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableProviders.map(provider => (
+                      <SelectItem key={provider.key} value={provider.key}>
+                        {provider.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Model:</span>
+                <Select 
+                  value={selectedModel} 
+                  onValueChange={setSelectedModel}
+                >
+                  <SelectTrigger className="w-48 h-8 text-xs">
+                    <SelectValue placeholder="Model" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {getAvailableModels().map(model => (
+                      <SelectItem key={model} value={model}>
+                        <span className="truncate">{model}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {/* Reasoning Controls - different UI for different model types */}
+              {supportsReasoningEffort(selectedModel) && (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Reasoning:</span>
+
+
+
+                  {/* Dropdown for OpenAI models (levels) */}
+                  {supportsReasoningLevels(selectedModel) && (
+                    <Select
+                      value={reasoningEffort}
+                      onValueChange={setReasoningEffort}
+                    >
+                      <SelectTrigger className="w-32 h-8 text-xs">
+                        <SelectValue placeholder="Effort" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="minimal">Minimal</SelectItem>
+                        <SelectItem value="low">Low</SelectItem>
+                        <SelectItem value="medium">Medium</SelectItem>
+                        <SelectItem value="high">High</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Input Area */}

@@ -26,6 +26,19 @@ from typing import Dict, List, Optional
 from src.core.credentials import get_credentials_manager
 from src.core.llm_providers.base import LLMProvider, ProviderType
 from src.core.llm_providers.mistral_provider import MISTRAL_AVAILABLE, MistralProvider
+from src.core.llm_providers.model_config import get_provider_description
+from src.core.llm_providers.novita_provider import (
+    OPENAI_AVAILABLE as NOVITA_AVAILABLE,
+)
+from src.core.llm_providers.novita_provider import (
+    NovitaProvider,
+)
+from src.core.llm_providers.ollama_provider import (
+    HTTPX_AVAILABLE as OLLAMA_HTTPX_AVAILABLE,
+)
+from src.core.llm_providers.ollama_provider import (
+    OllamaProvider,
+)
 from src.core.llm_providers.openai_provider import OPENAI_AVAILABLE, OpenAIProvider
 from src.utils.config import get_settings
 from src.utils.logging import get_logger
@@ -36,7 +49,7 @@ logger = get_logger(__name__)
 class APIKeyManager:
     """Manages API keys from multiple sources with priority order."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize API key manager."""
         self.settings = get_settings()
         self.credentials = get_credentials_manager()
@@ -45,24 +58,20 @@ class APIKeyManager:
         self, provider: str, override_key: Optional[str] = None
     ) -> Optional[str]:
         """
-        Get API key for a provider with priority order:
-        1. Override key (passed directly)
+        Retrieve the API key for a given provider, following this priority:
+        1. Direct override (if provided)
         2. Secure local storage (user-entered via UI)
         3. Environment variables (developer setup)
 
         Args:
-            provider: Provider name (openai)
-            override_key: Direct API key override
+            provider: Name of the provider (e.g., "openai", "mistral")
+            override_key: Optional direct API key override
 
         Returns:
-            API key if found, None otherwise
+            The API key if found, otherwise None.
         """
         # Priority 1: Direct override
-        if (
-            override_key
-            and override_key.strip()
-            and override_key != f"your_{provider}_api_key_here"
-        ):
+        if override_key and override_key.strip() and override_key != f"your_{provider}_api_key_here":
             return override_key.strip()
 
         # Priority 2: Secure local storage (UI-entered keys)
@@ -73,9 +82,14 @@ class APIKeyManager:
         # Priority 3: Environment variables (developer setup)
         env_key = None
         if provider == "openai":
-            env_key = self.settings.openai_api_key
+            env_key = getattr(self.settings, "openai_api_key", None)
         elif provider == "mistral":
             env_key = getattr(self.settings, "mistral_api_key", None)
+        elif provider == "novita":
+            env_key = getattr(self.settings, "novita_api_key", None)
+        elif provider == "ollama":
+            # Ollama doesn't require API keys, but we check if it's available
+            return "local"  # Special value indicating local availability
 
         if env_key and env_key.strip() and env_key != f"your_{provider}_api_key_here":
             return env_key.strip()
@@ -116,7 +130,7 @@ class APIKeyManager:
         """
         result = {}
 
-        for provider in ["openai", "mistral"]:
+        for provider in ["openai", "mistral", "novita", "ollama"]:
             has_env_key = False
             has_stored_key = False
 
@@ -126,6 +140,11 @@ class APIKeyManager:
                 env_key = self.settings.openai_api_key
             elif provider == "mistral":
                 env_key = getattr(self.settings, "mistral_api_key", None)
+            elif provider == "novita":
+                env_key = getattr(self.settings, "novita_api_key", None)
+            elif provider == "ollama":
+                # Ollama doesn't use API keys - check if service is available
+                env_key = "local"
 
             if (
                 env_key
@@ -153,7 +172,6 @@ class APIKeyManager:
 
 # Global instances
 _api_key_manager = None
-_provider_cache = None  # Cache for the default provider
 
 
 def get_api_key_manager() -> APIKeyManager:
@@ -223,6 +241,27 @@ def get_available_providers() -> Dict[ProviderType, bool]:
     except Exception:
         providers[ProviderType.MISTRAL] = False
 
+    # Check Ollama availability
+    try:
+        if OLLAMA_HTTPX_AVAILABLE:
+            ollama_provider = OllamaProvider()
+            providers[ProviderType.OLLAMA] = ollama_provider.is_available()
+        else:
+            providers[ProviderType.OLLAMA] = False
+    except Exception:
+        providers[ProviderType.OLLAMA] = False
+
+    # Check Novita availability
+    try:
+        if NOVITA_AVAILABLE:
+            novita_key = key_manager.get_api_key("novita")
+            novita_provider = NovitaProvider(api_key=novita_key)
+            providers[ProviderType.NOVITA] = novita_provider.is_available()
+        else:
+            providers[ProviderType.NOVITA] = False
+    except Exception:
+        providers[ProviderType.NOVITA] = False
+
     return providers
 
 
@@ -275,116 +314,44 @@ def get_llm_provider(
             )
         return provider
 
+    if provider_type == ProviderType.OLLAMA:
+        if not OLLAMA_HTTPX_AVAILABLE:
+            raise ImportError(
+                "Ollama provider requires the httpx package. Install with: pip install httpx"
+            )
+        provider = OllamaProvider(api_key=api_key)  # API key not used for Ollama
+        if not provider.is_available():
+            raise ValueError(
+                "Ollama provider is not available. Please ensure Ollama is running:\n"
+                "- Install Ollama from https://ollama.ai\n"
+                "- Run 'ollama serve' to start the service\n"
+                "- Check that the service is accessible at the configured URL"
+            )
+        return provider
+
+    if provider_type == ProviderType.NOVITA:
+        if not NOVITA_AVAILABLE:
+            raise ImportError(
+                "Novita provider requires the openai package. Install with: pip install openai"
+            )
+        final_key = key_manager.get_api_key("novita", api_key)
+        provider = NovitaProvider(api_key=final_key)
+        if not provider.is_available():
+            raise ValueError(
+                "Novita provider is not available. Please configure your Novita API key:\n"
+                "- Through the UI (recommended), or\n"
+                "- Set NOVITA_API_KEY environment variable\n"
+                "- Get your API key from https://novita.ai"
+            )
+        return provider
+
     raise ValueError(f"Unsupported provider type: {provider_type}")
-
-
-def get_default_provider() -> LLMProvider:
-    """
-    Get the default LLM provider based on configuration or availability.
-    Uses caching to ensure the same instance is reused across requests.
-
-    This function will:
-    1. Check if a default provider is set in configuration
-    2. Fall back to the first available provider
-    3. Raise an error if no providers are available
-
-    Returns:
-        Configured LLM provider instance.
-
-    Raises:
-        ValueError: If no providers are available.
-    """
-    global _provider_cache
-
-    # Return cached provider if available
-    if _provider_cache is not None:
-        logger.debug("🔄 Returning cached default provider")
-        return _provider_cache
-
-    logger.info("🔍 Starting LLM provider initialization...")
-    settings = get_settings()
-    key_manager = get_api_key_manager()
-
-    # Log current configuration status
-    config_status = key_manager.list_configured_providers()
-    logger.debug(f"📊 Provider configuration status: {config_status}")
-
-    # Check for available providers (environment variables or user-configured keys)
-    available = get_available_providers()
-    logger.debug(f"📋 Available providers: {available}")
-
-    if not any(available.values()):
-        logger.warning("❌ No LLM providers are configured. Please configure API keys.")
-        raise ValueError(
-            "No LLM providers are available. Please configure API keys:\n"
-            "- Through the UI (recommended), or\n"
-            "- Set environment variables (OPENAI_API_KEY, MISTRAL_API_KEY, etc.)"
-        )
-
-    # Check if user has specified a default provider preference
-    preferred_provider = None
-    if settings.default_llm_provider:
-        provider_name = settings.default_llm_provider.lower()
-        if provider_name == "openai":
-            preferred_provider = ProviderType.OPENAI
-        elif provider_name == "mistral":
-            preferred_provider = ProviderType.MISTRAL
-        logger.info(f"🎯 User prefers provider: {provider_name}")
-
-    # Try preferred provider first if specified and available
-    provider_order = []
-    if preferred_provider and available.get(preferred_provider, False):
-        provider_order.append(preferred_provider)
-        logger.info(f"🔍 Trying preferred provider: {preferred_provider.value}")
-
-    # Add remaining providers as fallbacks
-    for provider_type in [ProviderType.OPENAI, ProviderType.MISTRAL]:
-        if provider_type not in provider_order and available.get(provider_type, False):
-            provider_order.append(provider_type)
-
-    # Try providers in order
-    for provider_type in provider_order:
-        try:
-            provider = get_llm_provider(provider_type)
-            logger.info(f"✅ Successfully initialized {provider_type.value}")
-
-            # Cache the provider for future use
-            _provider_cache = provider
-            logger.debug("💾 Cached default provider for future requests")
-
-            return provider
-        except Exception as e:
-            logger.warning(f"❌ Failed to initialize {provider_type.value}: {e}")
-            continue
-
-    # No providers available
-    logger.error("❌ No LLM providers are available")
-
-    error_msg = (
-        "No LLM providers are available. Please configure at least one API key:\n\n"
-    )
-
-    for provider, status in config_status.items():
-        if provider == "openai":
-            error_msg += f"• OpenAI: {'✓ Configured' if status['configured'] else '✗ Not configured'}\n"
-        elif provider == "mistral":
-            error_msg += f"• Mistral: {'✓ Configured' if status['configured'] else '✗ Not configured'}\n"
-
-    error_msg += "\nYou can configure API keys:\n"
-    error_msg += "- Through the UI (recommended for regular users)\n"
-    error_msg += "- Set environment variables (for developers):\n"
-    error_msg += "  - OPENAI_API_KEY for OpenAI\n"
-    error_msg += "  - MISTRAL_API_KEY for Mistral"
-
-    logger.error(f"🚨 Provider initialization failed: {error_msg}")
-    raise ValueError(error_msg)
 
 
 def clear_provider_cache():
     """Clear the provider cache to force re-initialization."""
-    global _provider_cache
-    _provider_cache = None
-    logger.debug("🗑️ Provider cache cleared")
+    # No longer needed since we removed the cache
+    pass
 
 
 def list_provider_info() -> List[Dict[str, any]]:
@@ -415,7 +382,7 @@ def list_provider_info() -> List[Dict[str, any]]:
                     "key_source": config_status.get("openai", {}).get("source", "none"),
                     "capabilities": openai.capabilities,
                     "default_model": openai.get_default_model(),
-                    "description": "GPT-4.1 with 1M token context and superior coding capabilities",
+                    "description": get_provider_description("openai"),
                 }
             )
         else:
@@ -457,7 +424,7 @@ def list_provider_info() -> List[Dict[str, any]]:
                     ),
                     "capabilities": mistral.capabilities,
                     "default_model": mistral.get_default_model(),
-                    "description": "Magistral Small reasoning model with <think></think> output",
+                    "description": get_provider_description("mistral"),
                 }
             )
         else:
@@ -477,6 +444,87 @@ def list_provider_info() -> List[Dict[str, any]]:
                 "name": "Mistral",
                 "available": False,
                 "configured": config_status.get("mistral", {}).get("configured", False),
+                "error": str(e),
+            }
+        )
+
+    # Ollama info (third priority)
+    try:
+        if OLLAMA_HTTPX_AVAILABLE:
+            ollama = OllamaProvider()
+            info.append(
+                {
+                    "type": ProviderType.OLLAMA.value,
+                    "name": "Ollama",
+                    "available": available.get(ProviderType.OLLAMA, False),
+                    "configured": config_status.get("ollama", {}).get("configured", False),
+                    "key_source": "local",  # No API key needed
+                    "capabilities": ollama.capabilities,
+                    "default_model": ollama.get_default_model(),
+                    "description": get_provider_description("ollama"),
+                }
+            )
+        else:
+            info.append(
+                {
+                    "type": ProviderType.OLLAMA.value,
+                    "name": "Ollama",
+                    "available": False,
+                    "configured": False,
+                    "error": "httpx package not installed (pip install httpx)",
+                }
+            )
+    except Exception as e:
+        info.append(
+            {
+                "type": ProviderType.OLLAMA.value,
+                "name": "Ollama",
+                "available": False,
+                "configured": config_status.get("ollama", {}).get("configured", False),
+                "error": str(e),
+            }
+        )
+
+    # Novita info (fourth priority)
+    try:
+        if NOVITA_AVAILABLE:
+            novita_key = key_manager.get_api_key("novita")
+            novita = NovitaProvider(api_key=novita_key)
+            info.append(
+                {
+                    "type": ProviderType.NOVITA.value,
+                    "name": "Novita",
+                    "available": available.get(ProviderType.NOVITA, False),
+                    "configured": config_status.get("novita", {}).get(
+                        "configured", False
+                    ),
+                    "key_source": config_status.get("novita", {}).get(
+                        "source", "none"
+                    ),
+                    "capabilities": novita.capabilities,
+                    "default_model": novita.get_default_model(),
+                    "description": get_provider_description("novita"),
+                }
+            )
+        else:
+            info.append(
+                {
+                    "type": ProviderType.NOVITA.value,
+                    "name": "Novita",
+                    "available": False,
+                    "configured": False,
+                    "error": "openai package not installed (pip install openai)",
+                }
+            )
+    except Exception as e:
+        info.append(
+            {
+                "type": ProviderType.NOVITA.value,
+                "name": "Novita",
+                "available": False,
+                "configured": config_status.get("novita", {}).get(
+                    "configured", False
+                ),
                 "error": str(e),
             }
         )

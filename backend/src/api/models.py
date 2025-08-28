@@ -33,6 +33,15 @@ class ChatRequest(BaseModel):
     conversation_history: Optional[List[Message]] = Field(
         [], description="Recent conversation context"
     )
+    provider: Optional[str] = Field(
+        None, description="Preferred LLM provider (openai, mistral, novita, ollama)"
+    )
+    model: Optional[str] = Field(
+        None, description="Preferred model name for the selected provider"
+    )
+    reasoning_effort: Optional[str] = Field(
+        None, description="Reasoning effort level for reasoning models (minimal, low, medium, high)"
+    )
 
 
 class ChatResponse(BaseModel):

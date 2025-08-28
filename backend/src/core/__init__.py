@@ -21,11 +21,7 @@ from src.core.memory_manager import (
     SessionStatus,
     get_memory_manager,
 )
-from src.core.simple_chat_controller import (
-    SimpleChatController,
-    SimpleChatResponse,
-    create_simple_chat_controller,
-)
+from src.core.simple_chat_controller import SimpleChatController
 from src.core.simple_document_handler import (
     SimpleDocumentHandler,
     SimpleDocumentUploadResult,

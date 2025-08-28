@@ -1849,6 +1849,11 @@ evaluation = [
     { name = "ragas" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "ruff" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.12.0,<4.0.0" },
@@ -1908,6 +1913,9 @@ requires-dist = [
     { name = "wheel", marker = "extra == 'dev'", specifier = ">=0.44.0,<1.0.0" },
 ]
 provides-extras = ["dev", "evaluation"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "ruff", specifier = ">=0.12.9" }]
 
 [[package]]
 name = "json5"

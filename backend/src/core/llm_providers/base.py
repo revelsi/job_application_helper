@@ -39,6 +39,7 @@ class ProviderType(Enum):
     ANTHROPIC = "anthropic"
     OLLAMA = "ollama"
     MISTRAL = "mistral"
+    NOVITA = "novita"
     AUTO = "auto"  # Automatically select based on available API keys
 
 
@@ -61,6 +62,8 @@ class GenerationRequest:
     temperature: float = 0.7
     model: Optional[str] = None  # Provider-specific model name
     context: Optional[Dict[str, Any]] = None
+    reasoning_effort: Optional[str] = None  # For reasoning models: 'minimal', 'low', 'medium', 'high'
+    verbosity: Optional[str] = None  # For GPT-5 models: 'low', 'medium', 'high'
 
 
 @dataclass
@@ -142,6 +145,8 @@ class LLMProvider(ABC):
         model: str,
         max_tokens: int,
         temperature: float,
+        reasoning_effort: Optional[str] = None,
+        verbosity: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Make the actual API call to the provider."""
         pass
@@ -251,7 +256,7 @@ class LLMProvider(ABC):
 
             # Make API call
             response = self._make_api_call(
-                messages, model, max_tokens, request.temperature
+                messages, model, max_tokens, request.temperature, request.reasoning_effort, request.verbosity
             )
 
             # Update rate limiting

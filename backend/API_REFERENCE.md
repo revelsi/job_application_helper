@@ -49,7 +49,7 @@ Base URL: `http://localhost:8000/`
     "error": null,
     "metadata": {
       "provider": "openai",
-      "model": "gpt-4.1-mini",
+      "model": "gpt-5-mini",
       "document_context_used": true,
       "context_documents": 2,
       "retrieval_time": 0.12,
@@ -263,7 +263,78 @@ Base URL: `http://localhost:8000/`
 
 ---
 
-## 6. API Documentation
+## 6. Ollama Model Management
+
+### Get Ollama Service Status
+
+**GET /ollama/status**
+
+- **Description:** Get overall Ollama service status and available models.
+- **Response Example:**
+  ```json
+  {
+    "status": "available",
+    "message": "Ollama service is running",
+    "available_models": 2,
+    "models": ["gemma3:1b", "llama3.2:1b"]
+  }
+  ```
+
+### List Available Models
+
+**GET /ollama/models**
+
+- **Description:** Get list of locally available Ollama models.
+- **Response Example:**
+  ```json
+  [
+    {
+      "name": "gemma3:1b",
+      "size": 2147483648,
+      "modified_at": "2024-01-15T10:30:00Z",
+      "digest": "sha256:abc123..."
+    }
+  ]
+  ```
+
+### Check Model Status
+
+**GET /ollama/models/{model_name}/status**
+
+- **Description:** Check if a specific model is available locally.
+- **Response Example:**
+  ```json
+  {
+    "model": "gemma3:1b",
+    "available": true,
+    "message": "Model 'gemma3:1b' is available"
+  }
+  ```
+
+### Download Model
+
+**POST /ollama/models/download**
+
+- **Description:** Download a model from Ollama library.
+- **Request Body:**
+  ```json
+  {
+    "model": "gemma3:1b"
+  }
+  ```
+- **Response Example:**
+  ```json
+  {
+    "success": true,
+    "message": "Successfully downloaded model 'gemma3:1b'",
+    "model": "gemma3:1b",
+    "error": null
+  }
+  ```
+
+---
+
+## 7. API Documentation
 
 **GET /docs**
 

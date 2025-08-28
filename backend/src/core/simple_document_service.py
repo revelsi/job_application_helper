@@ -316,7 +316,7 @@ class SimpleDocumentService:
     def get_relevant_context(
         self,
         query: str,
-        max_context_length: int = 100000,  # Updated for GPT-4.1-mini 128K context
+        max_context_length: int = 100000,  # Updated for GPT-5-mini 128K context
         max_candidate_doc_length: int = 50000,  # Allow full CV content
         max_job_doc_length: int = 30000,  # Allow detailed job descriptions
         max_company_doc_length: int = 20000,  # Allow comprehensive company info

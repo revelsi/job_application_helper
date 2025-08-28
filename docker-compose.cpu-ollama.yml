@@ -1,0 +1,18 @@
+# Docker Compose override for CPU-only Ollama
+# Use this when local Ollama with GPU is not available
+# Run with: docker compose -f docker-compose.yml -f docker-compose.cpu-ollama.yml up -d
+
+services:
+  backend:
+    environment:
+      # Point to Docker Ollama container instead of local
+      - OLLAMA_BASE_URL=http://ollama:11434
+    depends_on:
+      - ollama
+
+  ollama:
+    # Remove the profiles restriction to enable CPU-only Ollama
+    profiles: []
+    # Remove GPU layers for CPU-only operation
+    environment:
+      - OLLAMA_HOST=0.0.0.0

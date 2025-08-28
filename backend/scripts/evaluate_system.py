@@ -22,24 +22,20 @@ Evaluates the Job Application Helper system with simplified architecture.
 Tests LLM integration, document processing, and chat functionality.
 """
 
-import asyncio
-import json
-import os
+from pathlib import Path
 import sys
 import tempfile
 import time
-from datetime import datetime
-from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict
 
 # Add the src directory to the path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from src.core.llm_providers.factory import get_default_provider
 from src.core.simple_chat_controller import create_simple_chat_controller
-from src.core.simple_document_service import get_simple_document_service
 from src.core.simple_document_handler import create_simple_document_handler
-from src.core.storage import DocumentType, get_storage_system
+from src.core.simple_document_service import get_simple_document_service
+from src.core.storage import get_storage_system
 from src.utils.config import get_settings
 from src.utils.logging import get_logger
 
@@ -102,7 +98,7 @@ class SystemEvaluator:
                 return {"success": False, "error": "No LLM provider available"}
             
             # Test basic generation
-            from src.core.llm_providers.base import GenerationRequest, ContentType
+            from src.core.llm_providers.base import ContentType, GenerationRequest
             
             request = GenerationRequest(
                 prompt="Hello, this is a test. Please respond with 'Test successful'.",
@@ -121,8 +117,7 @@ class SystemEvaluator:
                     "tokens": response.tokens_used,
                     "response": response.content[:100]
                 }
-            else:
-                return {"success": False, "error": response.error}
+            return {"success": False, "error": response.error}
                 
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -175,14 +170,14 @@ class SystemEvaluator:
             # Create a test document
             test_content = "This is a test CV document with experience and skills."
             
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
                 f.write(test_content)
                 test_file = Path(f.name)
             
             try:
                 # Test document upload
                 upload_results = list(handler.upload_candidate_document(
-                    test_file, 
+                    test_file,
                     "test_cv.txt"
                 ))
                 
@@ -195,8 +190,7 @@ class SystemEvaluator:
                         "document_id": final_result.document_id,
                         "metadata": final_result.metadata
                     }
-                else:
-                    return {"success": False, "error": "Upload failed"}
+                return {"success": False, "error": "Upload failed"}
                     
             finally:
                 # Clean up test file
@@ -223,8 +217,7 @@ class SystemEvaluator:
                     "response_length": len(response.content),
                     "metadata": response.metadata
                 }
-            else:
-                return {"success": False, "error": response.error}
+            return {"success": False, "error": response.error}
                 
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -239,14 +232,14 @@ class SystemEvaluator:
             # Create test document
             test_content = "John Doe\nSoftware Engineer\nExperience: Python, React, Node.js\nEducation: Computer Science"
             
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
                 f.write(test_content)
                 test_file = Path(f.name)
             
             try:
                 # Upload document
                 upload_results = list(handler.upload_candidate_document(
-                    test_file, 
+                    test_file,
                     "john_doe_cv.txt"
                 ))
                 
@@ -268,8 +261,7 @@ class SystemEvaluator:
                         "chat_response": response.content[:200],
                         "documents_used": response.metadata.get("documents_used", 0)
                     }
-                else:
-                    return {"success": False, "error": f"Chat failed: {response.error}"}
+                return {"success": False, "error": f"Chat failed: {response.error}"}
                     
             finally:
                 # Clean up test file

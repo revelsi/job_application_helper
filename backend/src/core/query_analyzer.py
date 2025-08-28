@@ -33,7 +33,6 @@ import json
 from typing import Any, Dict, List, Optional
 
 from src.core.llm_providers.base import ContentType, GenerationRequest, LLMProvider
-from src.core.llm_providers.factory import get_default_provider
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -71,19 +70,22 @@ class QueryAnalyzer:
     detect intent, and determine optimal document retrieval strategies.
     """
 
-    def __init__(self, llm_provider: Optional[LLMProvider] = None):
+    def __init__(self, llm_provider: LLMProvider):
         """
         Initialize the query analyzer.
 
         Args:
-            llm_provider: LLM provider for analysis (will get default if None)
+            llm_provider: LLM provider for analysis (required)
         """
-        self.llm_provider = llm_provider or get_default_provider()
-        self.llm_available = self.llm_provider is not None
+        if llm_provider is None:
+            raise ValueError("LLM provider is required for QueryAnalyzer")
+            
+        self.llm_provider = llm_provider
+        self.llm_available = self.llm_provider.is_available()
 
         if not self.llm_available:
             logger.warning(
-                "Query analyzer initialized without LLM provider - using fallback rules"
+                "Query analyzer initialized with unavailable LLM provider - using fallback rules"
             )
         else:
             logger.info("Query analyzer initialized with LLM provider")
@@ -136,90 +138,53 @@ class QueryAnalyzer:
                 ]
             )
 
-        # Create sophisticated analysis prompt
-        analysis_prompt = f"""You are an expert query analyzer for a job application assistant system.
+        # Create simplified analysis prompt
+        analysis_prompt = f"""Analyze this job application query: "{query}"
 
-TASK: Analyze the user query to determine intent, document relevance, and provide strategic guidance.
+Respond with ONLY a JSON object in this exact format:
 
-**USER QUERY:** {query}
-
-**CONVERSATION CONTEXT:**
-{context_summary if context_summary else "No previous context"}
-
-**ANALYSIS FRAMEWORK:**
-
-1. **INTENT CLASSIFICATION** - Classify into ONE primary intent:
-   - `cover_letter`: Writing or improving cover letters
-   - `behavioral_interview`: Behavioral interview questions and STAR method responses
-   - `achievement_quantifier`: Quantifying achievements and impact
-   - `ats_optimizer`: ATS optimization and keyword matching
-   - `interview_answer`: General interview question responses
-   - `content_refinement`: Improving existing content
-   - `general`: General advice, questions, or information
-
-2. **DOCUMENT RELEVANCE WEIGHTS** - Assign weights (0.0-1.0, must sum to 1.0):
-   - `candidate`: CV, experience, skills, achievements, personal background
-   - `job`: Job descriptions, requirements, role details
-   - `company`: Company information, culture, research, background
-
-3. **QUERY CHARACTERISTICS**:
-   - `multi_query`: Does this contain multiple distinct questions? (YES/NO)
-   - `confidence`: How confident are you in this analysis? (0.0-1.0)
-
-4. **STRATEGIC EXPANSION** - Suggest 1-3 expanded/refined queries that would help answer the original question better.
-
-**RESPONSE FORMAT:**
-Respond with ONLY a valid JSON object:
-
-```json
 {{
-    "intent_type": "cover_letter",
-    "intent_parameters": {{
-        "company_name": "if mentioned",
-        "role_title": "if mentioned",
-        "specific_focus": "any specific aspects mentioned"
-    }},
+    "intent_type": "general",
     "document_weights": {{
-        "candidate": 0.6,
+        "candidate": 0.4,
         "job": 0.3,
-        "company": 0.1
+        "company": 0.3
     }},
     "is_multi_query": false,
-    "expanded_queries": [
-        "What specific achievements should I highlight for this role?",
-        "How can I connect my experience to this company's needs?"
-    ],
-    "confidence": 0.9,
-    "reasoning": "Brief explanation of the analysis and weighting strategy"
+    "expanded_queries": [],
+    "confidence": 0.8,
+    "reasoning": "Analysis complete"
 }}
-```
 
-**WEIGHTING GUIDELINES:**
-- Cover letters: High candidate (0.5-0.7), moderate job (0.2-0.4), low company (0.1-0.2)
-- Interview prep: Balanced candidate/job (0.4-0.5 each), moderate company (0.1-0.2)
-- General advice: Balanced across all three (0.3-0.4 each)
-- Company research: High company (0.5-0.7), moderate job (0.2-0.3), low candidate (0.1-0.2)
+Intent types: cover_letter, behavioral_interview, achievement_quantifier, ats_optimizer, interview_answer, content_refinement, general
 
-Analysis:"""
+Document weights must sum to 1.0. Higher candidate weight for personal questions, higher job weight for role questions, higher company weight for company questions."""
 
         # Use LLM for analysis - choose appropriate small/fast model based on provider
         # Determine the best small model for the current provider
         small_model = None
         if hasattr(self.llm_provider, "provider_type"):
             if self.llm_provider.provider_type.value == "openai":
-                small_model = "gpt-4.1-nano"  # OpenAI's small/fast model
+                small_model = "gpt-5-mini"  # OpenAI's reasoning model
             elif self.llm_provider.provider_type.value == "mistral":
-                small_model = "mistral-small-2506"  # Mistral's lightweight model for classification
+                small_model = "mistral-small-latest"  # Mistral's latest lightweight model for classification
             # For other providers, let them use their default model
+
+        # For now, let's use the default model to avoid potential issues
+        # small_model = None  # Use default model
 
         request = GenerationRequest(
             prompt=analysis_prompt,
             content_type=ContentType.GENERAL_RESPONSE,
             context={"task": "query_analysis"},
             max_tokens=500,
-            temperature=0.2,  # Low temperature for consistent analysis
+            # Remove temperature parameter for GPT-5-mini compatibility
+            # temperature=0.2,  # Low temperature for consistent analysis
             model=small_model,  # Use provider-appropriate small/fast model
         )
+        
+        logger.debug(f"Query analyzer using model: {small_model} for provider: {self.llm_provider.provider_type.value}")
+        logger.debug(f"Query analyzer prompt length: {len(analysis_prompt)}")
 
         response = self.llm_provider.generate_content(request)
 
@@ -227,9 +192,15 @@ Analysis:"""
             logger.error(f"LLM query analysis failed: {response.error}")
             return self._fallback_analysis(query)
 
+        # Check if response content is empty or None
+        if not response.content or not response.content.strip():
+            logger.error(f"LLM query analysis returned empty content. Response: {response}")
+            return self._fallback_analysis(query)
+
         try:
             # Parse LLM response
             content = response.content.strip()
+            logger.debug(f"Raw LLM query analysis response: {content[:200]}...")
 
             # Clean JSON from markdown formatting
             if content.startswith("```json"):
@@ -237,6 +208,11 @@ Analysis:"""
             if content.endswith("```"):
                 content = content[:-3]
             content = content.strip()
+
+            # Check if content is still empty after cleaning
+            if not content:
+                logger.error("LLM query analysis content is empty after cleaning")
+                return self._fallback_analysis(query)
 
             analysis_data = json.loads(content)
 

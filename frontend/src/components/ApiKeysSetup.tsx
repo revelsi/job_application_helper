@@ -34,9 +34,15 @@ export const ApiKeysSetup: React.FC<ApiKeysSetupProps> = ({ isOpen, onClose, onS
   const prevConfigRef = useRef<boolean>(false);
 
   const providers = [
-    { key: 'openai', name: 'OpenAI', icon: <Key className="h-4 w-4" />, required: false },
-    { key: 'mistral', name: 'Mistral', icon: <Key className="h-4 w-4" />, required: false },
+    { key: 'openai', name: 'OpenAI', icon: <Key className="h-4 w-4" />, required: false, website: 'platform.openai.com' },
+    { key: 'mistral', name: 'Mistral', icon: <Key className="h-4 w-4" />, required: false, website: 'console.mistral.ai' },
+    { key: 'novita', name: 'Novita', icon: <Key className="h-4 w-4" />, required: false, website: 'novita.ai' },
+    { key: 'ollama', name: 'Ollama (Local)', icon: <Key className="h-4 w-4" />, required: false, local: true },
   ];
+
+  const getSelectedProviderInfo = () => {
+    return providers.find(p => p.key === selectedProvider);
+  };
 
   const apiKeys: { [key: string]: string } = {
     openai: openaiKey,
@@ -50,7 +56,7 @@ export const ApiKeysSetup: React.FC<ApiKeysSetupProps> = ({ isOpen, onClose, onS
 
   // Check if any provider is configured
   const isAnyProviderConfigured = () => {
-    return isProviderConfigured('openai') || isProviderConfigured('mistral');
+    return isProviderConfigured('openai') || isProviderConfigured('mistral') || isProviderConfigured('novita') || isProviderConfigured('ollama');
   };
 
   // Use the hook's status directly instead of local state
@@ -71,25 +77,26 @@ export const ApiKeysSetup: React.FC<ApiKeysSetupProps> = ({ isOpen, onClose, onS
   }, [isOpen, embedded, onClose]);
 
   // Monitor when required provider becomes configured in embedded mode
-  useEffect(() => {
-    if (embedded) {
-      const isCurrentlyConfigured = isAnyProviderConfigured();
-      const wasConfigured = prevConfigRef.current;
-      
-      // Only trigger if we just became configured (transition from false to true)
-      if (isCurrentlyConfigured && !wasConfigured) {
-        // Small delay to ensure the status is fully updated
-        // nosemgrep: unsafe-eval
-        const timer = setTimeout(() => {
-          onSuccess();
-        }, 1000);
-        return () => clearTimeout(timer);
-      }
-      
-      // Update the previous state
-      prevConfigRef.current = isCurrentlyConfigured;
-    }
-  }, [embedded, apiKeyStatus?.providers?.openai?.configured, onSuccess]);
+  // Disabled auto-redirect for embedded API keys tab to allow users to manage all providers
+  // useEffect(() => {
+  //   if (embedded) {
+  //     const isCurrentlyConfigured = isAnyProviderConfigured();
+  //     const wasConfigured = prevConfigRef.current;
+  //     
+  //     // Only trigger if we just became configured (transition from false to true)
+  //     if (isCurrentlyConfigured && !wasConfigured) {
+  //       // Small delay to ensure the status is fully updated
+  //       // nosemgrep: unsafe-eval
+  //       const timer = setTimeout(() => {
+  //         onSuccess();
+  //       }, 1000);
+  //       return () => clearTimeout(timer);
+  //     }
+  //     
+  //     // Update the previous state
+  //     prevConfigRef.current = isCurrentlyConfigured;
+  //   }
+  // }, [embedded, apiKeyStatus?.providers?.openai?.configured, apiKeyStatus?.providers?.mistral?.configured, apiKeyStatus?.providers?.novita?.configured, apiKeyStatus?.providers?.ollama?.configured, onSuccess]);
 
   const validateOpenaiKey = (key: string) => {
     const isValidFormat = key.startsWith('sk-') && key.length > 20;
@@ -118,12 +125,37 @@ export const ApiKeysSetup: React.FC<ApiKeysSetupProps> = ({ isOpen, onClose, onS
       setMessage({ type: 'success', text: `${provider} key removed successfully.` });
       onStateChange?.(); // Call the new callback
     } catch (error) {
-      console.error(`Error removing ${provider} key:`, error);
+      console.error('Error removing', provider, 'key:', error);
       setMessage({ type: 'error', text: `Failed to remove ${provider} key.` });
     }
   };
 
   const handleSaveKey = async () => {
+    if (!selectedProvider) {
+      setMessage({ type: 'error', text: 'Please select a provider.' });
+      return;
+    }
+
+    // Special handling for Ollama (local provider)
+    if (selectedProvider === 'ollama') {
+      setIsSaving(true);
+      setMessage(null);
+
+      try {
+        await setApiKey('ollama', 'local'); // Use 'local' as placeholder
+        setMessage({ type: 'success', text: 'Ollama connection verified successfully.' });
+        setApiKeyInput('');
+        setSelectedProvider(undefined);
+        setShowApiKey(false);
+        onStateChange?.();
+      } catch (error) {
+        setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Failed to connect to Ollama. Make sure Ollama is running.' });
+      } finally {
+        setIsSaving(false);
+      }
+      return;
+    }
+
     if (!apiKeyInput.trim()) {
       setMessage({ type: 'error', text: 'API key cannot be empty.' });
       return;
@@ -135,15 +167,8 @@ export const ApiKeysSetup: React.FC<ApiKeysSetupProps> = ({ isOpen, onClose, onS
       return;
     }
 
-    // Check if another provider is already configured (enforce single provider)
-    const otherProvider = selectedProvider === 'openai' ? 'mistral' : 'openai';
-    const otherProviderConfigured = isProviderConfigured(otherProvider);
-    
-    if (otherProviderConfigured) {
-      setMessage({ 
-        type: 'error', 
-        text: `Please remove the ${otherProvider === 'openai' ? 'OpenAI' : 'Mistral'} key first. Only one provider can be active at a time.` 
-      });
+    if (selectedProvider === 'huggingface' && !apiKeyInput.startsWith('hf_')) {
+      setMessage({ type: 'error', text: 'Hugging Face API key must start with "hf_"' });
       return;
     }
 
@@ -156,9 +181,7 @@ export const ApiKeysSetup: React.FC<ApiKeysSetupProps> = ({ isOpen, onClose, onS
       setApiKeyInput('');
       setSelectedProvider(undefined);
       setShowApiKey(false);
-      // Clear testing state for this provider
-      // Removed testingKeys state
-      onStateChange?.(); // Call the new callback
+      onStateChange?.();
     } catch (error) {
       setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Failed to save API key' });
     } finally {
@@ -208,23 +231,34 @@ export const ApiKeysSetup: React.FC<ApiKeysSetupProps> = ({ isOpen, onClose, onS
     return status?.configured && status?.source === 'stored';
   };
 
+  const isEnvironmentKey = (provider: string) => {
+    const status = getProviderStatus(provider);
+    return status?.configured && status?.source === 'env';
+  };
+
   const getProviderDescription = (provider: string) => {
-    switch (provider) {
-      case 'openai':
-        return 'GPT-4.1-mini - AI language model for intelligent responses';
-      case 'mistral':
-        return 'Magistral Small - Reasoning model with step-by-step thinking';
-      default:
-        return '';
+    // Use dynamic provider info from backend if available
+    const providerData = providerInfo.find(p => p.type === provider);
+    if (providerData?.description) {
+      return providerData.description;
     }
+    
+    // Fallback to generic description if dynamic data not available
+    return `${provider.charAt(0).toUpperCase() + provider.slice(1)} - Language models`;
   };
 
   const getSystemStatusMessage = () => {
     const openaiConfigured = isProviderConfigured('openai');
     const mistralConfigured = isProviderConfigured('mistral');
+    const huggingfaceConfigured = isProviderConfigured('huggingface');
+    const ollamaConfigured = isProviderConfigured('ollama');
     
-    if (openaiConfigured || mistralConfigured) {
-      const activeProvider = openaiConfigured ? 'OpenAI' : 'Mistral';
+    if (openaiConfigured || mistralConfigured || huggingfaceConfigured || ollamaConfigured) {
+      let activeProvider = 'Unknown';
+      if (openaiConfigured) activeProvider = 'OpenAI';
+      else if (mistralConfigured) activeProvider = 'Mistral';
+      else if (huggingfaceConfigured) activeProvider = 'Hugging Face';
+      else if (ollamaConfigured) activeProvider = 'Ollama';
       
       return {
         type: 'complete' as const,
@@ -235,12 +269,14 @@ export const ApiKeysSetup: React.FC<ApiKeysSetupProps> = ({ isOpen, onClose, onS
       return {
         type: 'incomplete' as const,
         title: 'Setup Required',
-        description: 'Configure one AI provider (OpenAI or Mistral) to use AI features.'
+        description: 'Configure one AI provider (OpenAI, Mistral, Hugging Face, or Ollama) to use AI features.'
       };
     }
   };
 
   const hasChangesToSave = () => {
+    // This function is currently only checking OpenAI, but we should extend it
+    // for other providers when we add their input fields
     const openaiStatus = getProviderStatus('openai');
     
     // Check if we have new keys to save (not from environment)
@@ -336,6 +372,14 @@ export const ApiKeysSetup: React.FC<ApiKeysSetupProps> = ({ isOpen, onClose, onS
                   <Trash2 className="h-4 w-4" />
                 </Button>
               )}
+              
+              {/* Environment key indicator */}
+              {isEnvironmentKey(provider.key) && (
+                <div className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded text-xs">
+                  <Key className="h-3 w-3" />
+                  Env
+                </div>
+              )}
 
               <div className="flex items-center gap-3">
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
@@ -394,6 +438,9 @@ export const ApiKeysSetup: React.FC<ApiKeysSetupProps> = ({ isOpen, onClose, onS
                 <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
                   Only one AI provider can be active at a time. Remove an existing key before adding a different provider.
                 </p>
+                <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                  Note: Environment-based API keys (marked with "Env") cannot be removed via the UI. Use environment variables to manage them.
+                </p>
               </div>
             </div>
           </div>
@@ -405,33 +452,78 @@ export const ApiKeysSetup: React.FC<ApiKeysSetupProps> = ({ isOpen, onClose, onS
                 Select Provider
               </Label>
               <Select 
-                value={selectedProvider} 
-                onValueChange={setSelectedProvider}
-                disabled={isAnyProviderConfigured()}
+                                  value={selectedProvider} 
+                  onValueChange={setSelectedProvider}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder={
-                    isAnyProviderConfigured() 
-                      ? "Remove existing provider to add a different one" 
-                      : "Choose an AI provider..."
-                  } />
+                                      <SelectValue placeholder="Choose an AI provider to configure..." />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="openai" disabled={isProviderConfigured('mistral')}>
+                  <SelectItem value="openai">
                     <div className="flex items-center gap-2">
                       <Key className="h-4 w-4" />
-                      <div>
-                        <div className="font-medium">OpenAI</div>
-                        <div className="text-xs text-muted-foreground">GPT-4.1-mini</div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">OpenAI</span>
+                          {isProviderConfigured('openai') && <span className="text-xs bg-green-100 text-green-700 px-1 py-0.5 rounded">configured</span>}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {(() => {
+                            const providerData = providerInfo.find(p => p.type === 'openai');
+                            return providerData?.default_model || 'GPT-5 Mini';
+                          })()}
+                        </div>
                       </div>
                     </div>
                   </SelectItem>
-                  <SelectItem value="mistral" disabled={isProviderConfigured('openai')}>
+                  <SelectItem value="mistral">
                     <div className="flex items-center gap-2">
                       <Key className="h-4 w-4" />
-                      <div>
-                        <div className="font-medium">Mistral</div>
-                        <div className="text-xs text-muted-foreground">Magistral Small (Reasoning)</div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">Mistral</span>
+                          {isProviderConfigured('mistral') && <span className="text-xs bg-green-100 text-green-700 px-1 py-0.5 rounded">configured</span>}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {(() => {
+                            const providerData = providerInfo.find(p => p.type === 'mistral');
+                            return providerData?.default_model || 'Mistral Small';
+                          })()}
+                        </div>
+                      </div>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="novita">
+                    <div className="flex items-center gap-2">
+                      <Key className="h-4 w-4" />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">Novita</span>
+                          {isProviderConfigured('novita') && <span className="text-xs bg-green-100 text-green-700 px-1 py-0.5 rounded">configured</span>}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {(() => {
+                            const providerData = providerInfo.find(p => p.type === 'novita');
+                            return providerData?.default_model || 'GPT-OSS-20B';
+                          })()}
+                        </div>
+                      </div>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="ollama">
+                    <div className="flex items-center gap-2">
+                      <Key className="h-4 w-4" />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">Ollama (Local)</span>
+                          {isProviderConfigured('ollama') && <span className="text-xs bg-green-100 text-green-700 px-1 py-0.5 rounded">configured</span>}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {(() => {
+                            const providerData = providerInfo.find(p => p.type === 'ollama');
+                            return providerData?.default_model || 'Llama 3.2';
+                          })()}
+                        </div>
                       </div>
                     </div>
                   </SelectItem>
@@ -445,7 +537,7 @@ export const ApiKeysSetup: React.FC<ApiKeysSetupProps> = ({ isOpen, onClose, onS
             </div>
 
             {/* API Key Input */}
-            {selectedProvider && (
+            {selectedProvider && selectedProvider !== 'ollama' && (
               <>
                 <div className="space-y-2">
                   <Label htmlFor="api-key-input" className="text-sm font-medium">
@@ -456,9 +548,9 @@ export const ApiKeysSetup: React.FC<ApiKeysSetupProps> = ({ isOpen, onClose, onS
                       id="api-key-input"
                       type={showApiKey ? "text" : "password"}
                       placeholder={
-                        selectedProvider === 'openai' 
-                          ? "Enter your OpenAI API key (sk-...)" 
-                          : "Enter your Mistral API key"
+                        selectedProvider 
+                          ? `Enter your ${getSelectedProviderInfo()?.name} API key`
+                          : "Enter your API key"
                       }
                       value={apiKeyInput}
                       onChange={(e) => setApiKeyInput(e.target.value)}
@@ -479,28 +571,62 @@ export const ApiKeysSetup: React.FC<ApiKeysSetupProps> = ({ isOpen, onClose, onS
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {selectedProvider === 'openai' 
-                      ? "Get your API key from platform.openai.com"
-                      : "Get your API key from console.mistral.ai"
+                    {selectedProvider && getSelectedProviderInfo()?.website
+                      ? `Get your API key from ${getSelectedProviderInfo()?.website}`
+                      : selectedProvider
+                      ? `Get your API key from ${getSelectedProviderInfo()?.name}`
+                      : "Get your API key from the provider's website"
                     }
                   </p>
                 </div>
 
+            {/* Ollama Setup Instructions */}
+            {selectedProvider === 'ollama' && (
+              <div className="space-y-3 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <div className="flex items-start gap-2">
+                  <Info className="h-4 w-4 text-blue-600 mt-0.5" />
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium text-blue-900">Ollama Setup Required</p>
+                    <p className="text-sm text-blue-700">
+                      Ollama runs locally and doesn't require an API key. To use Ollama:
+                    </p>
+                    <ol className="text-sm text-blue-700 space-y-1 list-decimal list-inside ml-4">
+                      <li>Install Ollama from <a href="https://ollama.ai" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-medium">ollama.ai</a></li>
+                      <li>Run <code className="bg-blue-100 px-1 py-0.5 rounded text-xs">ollama serve</code> in your terminal</li>
+                      <li>Models will be downloaded automatically when first used, or you can download them manually:</li>
+                      <ul className="text-sm text-blue-700 space-y-1 list-disc list-inside ml-4">
+                        <li><code className="bg-blue-100 px-1 py-0.5 rounded text-xs">ollama pull gemma3:1b</code></li>
+                        <li><code className="bg-blue-100 px-1 py-0.5 rounded text-xs">ollama pull llama3.2:1b</code></li>
+                      </ul>
+                      <li>Click "Connect to Ollama" below to verify the connection</li>
+                    </ol>
+                  </div>
+                </div>
+              </div>
+            )}
+
                 <div className="flex gap-3">
                   <Button
                     onClick={handleSaveKey}
-                    disabled={!apiKeyInput.trim() || !selectedProvider || isSaving}
+                    disabled={
+                      selectedProvider === 'ollama' 
+                        ? !selectedProvider || isSaving
+                        : !apiKeyInput.trim() || !selectedProvider || isSaving
+                    }
                     className="flex-1"
                   >
                     {isSaving ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Saving...
+                        {selectedProvider === 'ollama' ? 'Connecting...' : 'Saving...'}
                       </>
                     ) : (
                       <>
                         <Save className="mr-2 h-4 w-4" />
-                        Save {providers.find(p => p.key === selectedProvider)?.name} Key
+                        {selectedProvider === 'ollama' 
+                          ? 'Connect to Ollama' 
+                          : `Save ${providers.find(p => p.key === selectedProvider)?.name} Key`
+                        }
                       </>
                     )}
                   </Button>

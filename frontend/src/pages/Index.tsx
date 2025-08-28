@@ -6,6 +6,7 @@ import { DocumentUpload } from '@/components/DocumentUpload';
 import { CompactSessionManager } from '@/components/CompactSessionManager';
 import { ApiStatus } from '@/components/ApiStatus';
 import { ApiKeysSetup } from '@/components/ApiKeysSetup';
+import { OllamaModelManager } from '@/components/OllamaModelManager';
 import { useApiKeys } from '@/hooks/useApiKeys';
 import { Button } from '@/components/ui/button';
 import { apiClient } from '@/lib/api';
@@ -84,8 +85,12 @@ const Index = () => {
   const hasApiKeys = apiKeyStatus?.has_any_configured || false;
   const hasEnvConfigured = apiKeyStatus?.has_env_configured || false;
   
-  // Check if any provider (OpenAI or Mistral) is configured
-  const hasRequiredApiKeys = (apiKeyStatus?.providers?.openai?.configured || apiKeyStatus?.providers?.mistral?.configured) || false;
+  // Check if any provider (OpenAI, Mistral, Novita, or Ollama) is configured
+  const hasRequiredApiKeys = (apiKeyStatus?.providers?.openai?.configured || apiKeyStatus?.providers?.mistral?.configured || apiKeyStatus?.providers?.novita?.configured || apiKeyStatus?.providers?.ollama?.configured) || false;
+  
+  // Check if only cloud providers are configured (for informational purposes)
+  const hasCloudProviders = (apiKeyStatus?.providers?.openai?.configured || apiKeyStatus?.providers?.mistral?.configured || apiKeyStatus?.providers?.novita?.configured) || false;
+  const hasOnlyLocalProviders = apiKeyStatus?.providers?.ollama?.configured && !hasCloudProviders;
   
 
 
@@ -372,63 +377,22 @@ const Index = () => {
             </TabsList>
 
             <TabsContent value="api-keys" className="mt-0">
-              <div className="glass rounded-2xl p-6 border-glass-border">
-                {hasRequiredApiKeys ? (
-                  <div className="text-center space-y-6">
-                    <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto ${
-                      hasEnvConfigured ? 'bg-green-500/20' : 'bg-blue-500/20'
-                    }`}>
-                      <CheckCircle className={`h-8 w-8 ${
-                        hasEnvConfigured ? 'text-green-500' : 'text-blue-500'
-                      }`} />
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-bold text-gradient mb-2">
-                        {hasEnvConfigured ? 'All Systems Ready!' : 'Core System Ready!'}
-                      </h3>
-                      <p className="text-muted-foreground">
-                        {hasEnvConfigured 
-                          ? 'AI provider and environment variables are configured. You have access to all features.'
-                          : 'AI provider is configured and ready. You can use all AI features. Environment variables are optional for enhanced web search.'
-                        }
-                      </p>
-                      <div className={`mt-4 p-4 rounded-lg border ${
-                        hasEnvConfigured 
-                          ? 'bg-green-50 border-green-200' 
-                          : 'bg-blue-50 border-blue-200'
-                      }`}>
-                        <p className={`text-sm ${
-                          hasEnvConfigured ? 'text-green-800' : 'text-blue-800'
-                        }`}>
-                          <strong>Status:</strong> Ready to use AI-powered features
-                        </p>
-                        <p className={`text-xs mt-1 ${
-                          hasEnvConfigured ? 'text-green-600' : 'text-blue-600'
-                        }`}>
-                          You can proceed to upload your documents and start chatting with the AI assistant.
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex justify-end">
-                      <Button
-                        onClick={() => setActiveTab('documents')}
-                        className="gradient-primary text-white shadow-glow hover:shadow-xl transition-all"
-                      >
-                        Next: Upload Documents
-                        <ArrowRight className="h-4 w-4 ml-2" />
-                      </Button>
-                    </div>
+              <div className="space-y-6">
+                <div className="glass rounded-2xl p-6 border-glass-border">
+                  <ApiKeysSetup
+                    isOpen={true}
+                    onClose={() => {}} // No close for embedded version
+                    onSuccess={handleApiKeysSuccess}
+                    onStateChange={handleApiKeysStateChange}
+                    embedded={true}
+                  />
+                </div>
+                
+                {/* Ollama Model Manager - only show if Ollama is configured */}
+                {apiKeyStatus?.providers?.ollama?.configured && (
+                  <div className="glass rounded-2xl p-6 border-glass-border">
+                    <OllamaModelManager />
                   </div>
-                ) : (
-                  <>
-                    <ApiKeysSetup
-                      isOpen={true}
-                      onClose={() => {}} // No close for embedded version
-                      onSuccess={handleApiKeysSuccess}
-                      onStateChange={handleApiKeysStateChange}
-                      embedded={true}
-                    />
-                  </>
                 )}
               </div>
             </TabsContent>
@@ -441,13 +405,16 @@ const Index = () => {
                       <AlertTriangle className="h-8 w-8 text-yellow-500" />
                     </div>
                     <div>
-                      <h3 className="text-xl font-bold text-gradient mb-2">API Keys Required</h3>
+                      <h3 className="text-xl font-bold text-gradient mb-2">AI Provider Required</h3>
                       <p className="text-muted-foreground">
-                        Please configure at least one AI provider (OpenAI or Mistral) before uploading documents.
+                        Please configure at least one AI provider (OpenAI, Mistral, Novita, or Ollama) before uploading documents.
                       </p>
                       <div className="mt-4 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
                         <p className="text-sm text-yellow-800">
                           <strong>Next Step:</strong> Go to the API Keys tab to configure an AI provider
+                        </p>
+                        <p className="text-xs text-yellow-700 mt-1">
+                          Choose from cloud providers (OpenAI, Mistral, Novita) or local (Ollama)
                         </p>
                       </div>
                     </div>

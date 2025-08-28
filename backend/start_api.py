@@ -6,12 +6,12 @@ Properly configures Python path and starts the API server
 
 import multiprocessing
 import os
-import sys
 from pathlib import Path
+import sys
 
 # Configure multiprocessing to prevent semaphore leaks on macOS
 if sys.platform == "darwin":  # macOS
-    multiprocessing.set_start_method('spawn', force=True)
+    multiprocessing.set_start_method("spawn", force=True)
 
 # Add the backend directory to Python path
 backend_dir = Path(__file__).parent

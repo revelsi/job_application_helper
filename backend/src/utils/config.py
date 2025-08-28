@@ -45,8 +45,18 @@ class Settings(BaseSettings):
     openai_api_key: Optional[str] = Field(default=None, env="OPENAI_API_KEY")
     anthropic_api_key: Optional[str] = Field(default=None, env="ANTHROPIC_API_KEY")
     mistral_api_key: Optional[str] = Field(default=None, env="MISTRAL_API_KEY")
+    huggingface_api_key: Optional[str] = Field(default=None, env="HUGGINGFACE_API_KEY")
     default_llm_provider: Optional[str] = Field(
         default=None, env="DEFAULT_LLM_PROVIDER"
+    )
+    
+    # Ollama Configuration (local inference)
+    ollama_base_url: str = Field(default="http://localhost:11434", env="OLLAMA_BASE_URL")
+    ollama_timeout: int = Field(default=300, env="OLLAMA_TIMEOUT")  # Increased from 60 to 300 seconds
+    
+    # Hugging Face Configuration
+    huggingface_base_url: Optional[str] = Field(
+        default="https://api-inference.huggingface.co", env="HUGGINGFACE_BASE_URL"
     )
 
     # External APIs
@@ -65,7 +75,7 @@ class Settings(BaseSettings):
     # Document Processing Configuration
     max_context_length: int = Field(
         default=100000, env="MAX_CONTEXT_LENGTH"
-    )  # ~100K chars ≈ 25K tokens for GPT-4.1-mini
+    )  # ~100K chars ≈ 25K tokens for GPT-5-mini
 
     # Per-document context limits (significantly increased for modern LLMs)
     max_candidate_doc_length: int = Field(

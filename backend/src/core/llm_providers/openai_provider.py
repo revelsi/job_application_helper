@@ -40,11 +40,16 @@ from src.core.llm_providers.base import (
     ProviderCapabilities,
     ProviderType,
 )
+from src.core.llm_providers.model_config import (
+    get_model_config,
+    get_models_for_provider,
+    get_safe_token_limits,
+)
 from src.utils.config import get_settings
 
 
 class OpenAIProvider(LLMProvider):
-    """OpenAI provider implementation with GPT-4.1-mini support."""
+    """OpenAI provider implementation with GPT-5-mini support."""
 
     def __init__(self, api_key: Optional[str] = None):
         """
@@ -73,18 +78,30 @@ class OpenAIProvider(LLMProvider):
 
     @property
     def capabilities(self) -> ProviderCapabilities:
-        """Return OpenAI provider capabilities optimized for GPT-4.1-mini."""
+        """Return OpenAI provider capabilities based on model configurations."""
+        models = get_models_for_provider("openai")
+        model_names = [model.name for model in models]
+        
+        # Use default model capabilities as baseline
+        default_config = get_model_config(self.get_default_model())
+        if default_config:
+            return ProviderCapabilities(
+                max_tokens=default_config.max_output_tokens,
+                supports_streaming=default_config.supports_streaming,
+                supports_function_calling=default_config.supports_function_calling,
+                rate_limit_per_minute=default_config.rate_limit_rpm,
+                cost_per_1k_tokens=default_config.cost_per_1k_input_tokens,
+                models=model_names,
+            )
+        
+        # Fallback if model config not found
         return ProviderCapabilities(
-            max_tokens=32768,  # GPT-4.1-mini max output tokens
+            max_tokens=16384,
             supports_streaming=True,
             supports_function_calling=True,
-            rate_limit_per_minute=60,  # Conservative estimate
-            cost_per_1k_tokens=0.0004,  # $0.40 per million input tokens
-            models=[
-                "gpt-4.1-mini",
-                "gpt-4.1",
-                "gpt-4.1-nano",
-            ],
+            rate_limit_per_minute=60,
+            cost_per_1k_tokens=0.00015,
+            models=model_names,
         )
 
     def is_available(self) -> bool:
@@ -97,8 +114,26 @@ class OpenAIProvider(LLMProvider):
         )
 
     def get_default_model(self) -> str:
-        """Get the default OpenAI model - GPT-4.1-mini for cost efficiency."""
-        return "gpt-4.1-mini"
+        """Get the default OpenAI model - GPT-5-mini for latest capabilities."""
+        return "gpt-5-mini"
+
+    def _supports_reasoning_effort(self, model: str) -> bool:
+        """Check if a model supports reasoning_effort parameter."""
+        # Currently only GPT-5-mini supports reasoning_effort
+        reasoning_models = ["gpt-5-mini"]
+        return model in reasoning_models
+    
+    def _supports_temperature(self, model: str) -> bool:
+        """Check if a model supports temperature parameter."""
+        # GPT-5 models do not support temperature parameter
+        gpt5_models = ["gpt-5-mini"]
+        return model not in gpt5_models
+    
+    def _supports_verbosity(self, model: str) -> bool:
+        """Check if a model supports verbosity parameter."""
+        # Currently only GPT-5-mini supports verbosity
+        verbosity_models = ["gpt-5-mini"]
+        return model in verbosity_models
 
     @property
     def client(self) -> OpenAI:
@@ -144,15 +179,51 @@ class OpenAIProvider(LLMProvider):
         model: str,
         max_tokens: int,
         temperature: float,
+        reasoning_effort: Optional[str] = None,
+        verbosity: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Make API call to OpenAI."""
         try:
-            response = self.client.chat.completions.create(
-                model=model,
-                messages=messages,
-                max_tokens=max_tokens,
-                temperature=temperature,
-            )
+            # Get safe token limits for this specific model
+            token_limits = get_safe_token_limits(model)
+            safe_max_tokens = min(max_tokens, token_limits["recommended_output"])
+            
+            self.logger.debug(f"OpenAI API call: {model} with {safe_max_tokens} max tokens, reasoning_effort: {reasoning_effort}")
+            
+            # Build API call parameters
+            api_params = {
+                "model": model,
+                "messages": messages,
+            }
+            
+            # Only add temperature for models that support it (not GPT-5 models)
+            if self._supports_temperature(model):
+                api_params["temperature"] = temperature
+                self.logger.debug(f"Using temperature: {temperature} for model: {model}")
+            else:
+                self.logger.debug(f"Skipping temperature parameter for model: {model} (not supported)")
+            
+            # Use max_completion_tokens for GPT-5-mini, max_tokens for other models
+            if model == "gpt-5-mini":
+                api_params["max_completion_tokens"] = safe_max_tokens
+            else:
+                api_params["max_tokens"] = safe_max_tokens
+            
+            # Add reasoning_effort for reasoning models like GPT-5-mini
+            if reasoning_effort and self._supports_reasoning_effort(model):
+                api_params["reasoning_effort"] = reasoning_effort
+                self.logger.debug(f"Using reasoning_effort: {reasoning_effort} for model: {model}")
+            elif reasoning_effort:
+                self.logger.debug(f"Ignoring reasoning_effort '{reasoning_effort}' - not supported by model: {model}")
+            
+            # Add verbosity for models that support it (GPT-5 models)
+            if verbosity and self._supports_verbosity(model):
+                api_params["verbosity"] = verbosity
+                self.logger.debug(f"Using verbosity: {verbosity} for model: {model}")
+            elif verbosity:
+                self.logger.debug(f"Ignoring verbosity '{verbosity}' - not supported by model: {model}")
+            
+            response = self.client.chat.completions.create(**api_params)
             return response
         except Exception as e:
             self.logger.error(f"OpenAI API call failed: {e}")
@@ -191,18 +262,49 @@ class OpenAIProvider(LLMProvider):
             # Build messages
             messages = self._build_messages(request)
             model = request.model or self.get_default_model()
-            max_tokens = request.max_tokens or self.capabilities.max_tokens
+            
+            # Get safe token limits for this specific model
+            token_limits = get_safe_token_limits(model, request.max_tokens)
+            max_tokens = request.max_tokens or token_limits["recommended_output"]
 
-            self.logger.info(f"Starting streaming generation with model: {model}")
+            self.logger.info(f"Starting streaming generation with model: {model} (max_tokens: {max_tokens})")
 
+            # Build API call parameters for streaming
+            stream_params = {
+                "model": model,
+                "messages": messages,
+                "stream": True,
+            }
+            
+            # Only add temperature for models that support it (not GPT-5 models)
+            if self._supports_temperature(model):
+                stream_params["temperature"] = request.temperature
+                self.logger.debug(f"Using temperature: {request.temperature} for streaming with model: {model}")
+            else:
+                self.logger.debug(f"Skipping temperature parameter for streaming with model: {model} (not supported)")
+            
+            # Use max_completion_tokens for GPT-5-mini, max_tokens for other models
+            if model == "gpt-5-mini":
+                stream_params["max_completion_tokens"] = max_tokens
+            else:
+                stream_params["max_tokens"] = max_tokens
+            
+            # Add reasoning_effort for reasoning models like GPT-5-mini
+            if request.reasoning_effort and self._supports_reasoning_effort(model):
+                stream_params["reasoning_effort"] = request.reasoning_effort
+                self.logger.debug(f"Using reasoning_effort: {request.reasoning_effort} for streaming with model: {model}")
+            elif request.reasoning_effort:
+                self.logger.debug(f"Ignoring reasoning_effort '{request.reasoning_effort}' - not supported by model: {model}")
+            
+            # Add verbosity for models that support it (GPT-5 models)
+            if request.verbosity and self._supports_verbosity(model):
+                stream_params["verbosity"] = request.verbosity
+                self.logger.debug(f"Using verbosity: {request.verbosity} for streaming with model: {model}")
+            elif request.verbosity:
+                self.logger.debug(f"Ignoring verbosity '{request.verbosity}' - not supported by model: {model}")
+            
             # Make streaming API call
-            stream = self.client.chat.completions.create(
-                model=model,
-                messages=messages,
-                max_tokens=max_tokens,
-                temperature=request.temperature,
-                stream=True,
-            )
+            stream = self.client.chat.completions.create(**stream_params)
 
             # Yield content chunks
             for chunk in stream:

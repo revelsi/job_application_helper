@@ -19,16 +19,25 @@ from datetime import datetime
 from fastapi import APIRouter
 
 from src.api.models import HealthResponse
+from src.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/health", tags=["health"])
 
 
 @router.get("/", response_model=HealthResponse)
-def health_check():
-    # In a real implementation, check the status of core services
-    services = {
-        "llm": True,  # Could check provider availability
-        "documents": True,  # Could check document service
-        "storage": True,  # Could check storage system
-    }
-    return HealthResponse(status="ok", timestamp=datetime.now(), services=services)
+async def health_check():
+    """Simple health check endpoint."""
+    logger.info("🔍 Health check requested")
+    
+    return HealthResponse(
+        status="ok",
+        timestamp=datetime.now(),
+        services={
+            "llm": True,
+            "documents": True,
+            "storage": True,
+            "backend_ready": True
+        }
+    )

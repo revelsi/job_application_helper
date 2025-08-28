@@ -26,9 +26,8 @@ This script helps you check your system status:
 """
 
 import os
-import subprocess
-import sys
 from pathlib import Path
+import sys
 
 
 def check_virtual_env():
@@ -185,7 +184,7 @@ def main():
         os.system("python scripts/check_system.py")
     elif choice == "0":
         print("👋 Happy coding!")
-        return
+        return None
     else:
         print("❌ Invalid choice. Please try again.")
 

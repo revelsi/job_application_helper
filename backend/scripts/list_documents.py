@@ -21,15 +21,14 @@ Document Listing Script
 Lists all documents stored in the Job Application Helper system.
 """
 
-import sys
 from pathlib import Path
+import sys
 
 # Add the src directory to the path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from src.core.storage import DocumentType, get_storage_system
 from src.core.simple_document_service import get_simple_document_service
-from src.utils.config import get_settings
+from src.core.storage import get_storage_system
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -54,7 +53,7 @@ def list_storage_documents():
         
         if not all_docs:
             print("📂 No documents found in storage system")
-            return
+            return None
         
         print(f"📊 Total documents: {len(all_docs)}")
         
@@ -103,7 +102,7 @@ def list_document_service_contents():
         
         if not all_docs:
             print("📂 No documents found in document service")
-            return
+            return None
         
         print(f"📊 Total documents in service: {len(all_docs)}")
         
@@ -154,7 +153,7 @@ def show_system_summary():
         
         # Check for consistency
         if len(storage_docs) != len(service_docs):
-            print(f"⚠️  Document count mismatch between storage and service")
+            print("⚠️  Document count mismatch between storage and service")
         else:
             print("✅ Document counts are consistent")
         
@@ -216,10 +215,9 @@ def main():
     if passed < total:
         print(f"\n⚠️  {total - passed} checks failed. Please review the output above.")
         return 1
-    else:
-        print("\n🎉 All checks completed successfully!")
-        return 0
+    print("\n🎉 All checks completed successfully!")
+    return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main()) 
+    sys.exit(main())

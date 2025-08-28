@@ -18,13 +18,12 @@ limitations under the License.
 Tests for the simplified Document Manager.
 """
 
+from datetime import datetime
 import unittest
 from unittest.mock import Mock, patch
-from datetime import datetime
 
 from src.core.document_manager import (
     DocumentManager,
-    DocumentOperationResult,
     get_document_manager,
 )
 from src.core.storage import DocumentType
@@ -42,8 +41,8 @@ class TestDocumentManager(unittest.TestCase):
         self.mock_document_service = Mock()
         
         # Create document manager with mocked dependencies
-        with patch('src.core.document_manager.get_storage_system', return_value=self.mock_storage), \
-             patch('src.core.document_manager.get_simple_document_service', return_value=self.mock_document_service):
+        with patch("src.core.document_manager.get_storage_system", return_value=self.mock_storage), \
+             patch("src.core.document_manager.get_simple_document_service", return_value=self.mock_document_service):
             self.document_manager = DocumentManager()
 
     def test_initialization(self):
@@ -232,8 +231,8 @@ class TestDocumentManager(unittest.TestCase):
 
     def test_get_document_manager_factory(self):
         """Test the factory function for creating document manager."""
-        with patch('src.core.document_manager.get_storage_system'), \
-             patch('src.core.document_manager.get_simple_document_service'):
+        with patch("src.core.document_manager.get_storage_system"), \
+             patch("src.core.document_manager.get_simple_document_service"):
             manager = get_document_manager()
             self.assertIsInstance(manager, DocumentManager)
 
