@@ -6,7 +6,7 @@ setlocal enabledelayedexpansion
 
 REM Configuration
 set BACKEND_PORT=8000
-set FRONTEND_PORT=8080
+set FRONTEND_PORT=5173
 
 echo 🚀 JOB APPLICATION HELPER - UNIFIED LAUNCHER
 echo ============================================================
@@ -28,9 +28,9 @@ REM Function to check prerequisites
 :check_prerequisites
 echo ℹ️  Checking prerequisites...
 
-REM Check virtual environment
-if not exist "backend\venv" (
-    echo ❌ Virtual environment not found. Please run setup first.
+REM Check UV setup
+if not exist "backend\.venv" (
+    echo ❌ UV virtual environment not found. Please run setup first.
     echo 💡 Run: setup.bat
     exit /b 1
 )
@@ -62,8 +62,6 @@ if %errorlevel% equ 0 (
     exit /b 0
 )
 
-REM Activate virtual environment and start backend
-call backend\venv\Scripts\activate.bat
 cd backend
 
 REM Check if .env file exists
@@ -78,9 +76,9 @@ if not exist ".env" (
     )
 )
 
-REM Start the API server
+REM Start the API server with UV
 echo ✅ Backend starting on http://localhost:%BACKEND_PORT%
-start /B python start_api.py
+start /B uv run python start_api.py
 timeout /t 3 /nobreak >nul
 
 REM Check if backend started successfully

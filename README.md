@@ -27,17 +27,17 @@ docker compose up -d
 ```
 **Access:** http://localhost:8080
 
-### Option 3: Local Setup (No Docker)
+### Option 3: Local Setup with UV (No Docker)
 ```bash
 git clone <repository-url>
 cd job_application_helper
-./setup.sh       # Linux/macOS
-setup.bat        # Windows
-./launch_app.sh  # Linux/macOS
-launch_app.bat   # Windows
+./setup-uv.sh       # Linux/macOS
+setup.bat           # Windows
+./launch_app-uv.sh  # Linux/macOS
+launch_app.bat      # Windows
 ```
 
-**Access:** http://localhost:8080
+**Access:** http://localhost:5173
 
 ## Requirements
 
@@ -70,21 +70,28 @@ docker compose up -d
 ./start-containers.sh logs    # View logs
 ```
 
-### Local Setup (No Docker)
+### Backend Scripts
 ```bash
-./setup.sh && ./launch_app.sh  # Linux/macOS
-setup.bat && launch_app.bat    # Windows
+cd backend
+./run_scripts.sh test         # Run all tests
+./run_scripts.sh test -v      # Run tests with verbose output
+./run_scripts.sh check        # Run system check
+./run_scripts.sh status       # Check system status
 ```
 
-### Manual Setup
+### Local Setup with UV (No Docker)
+```bash
+./setup-uv.sh && ./launch_app-uv.sh  # Linux/macOS
+setup.bat && launch_app.bat          # Windows
+```
+
+### Manual Setup with UV
 ```bash
 # Backend
 cd backend
-python3.9 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+uv sync
 cp env.example .env
-python start_api.py
+uv run python start_api.py
 
 # Frontend (new terminal)
 cd frontend

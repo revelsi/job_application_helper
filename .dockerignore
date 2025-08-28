@@ -64,9 +64,9 @@ CONTRIBUTING.md
 SECURITY.md
 LICENSE
 *.md
-setup.sh
+setup-uv.sh
 setup.bat
-launch_app.sh
+launch_app-uv.sh
 launch_app.bat
 start-containers.sh
 start-containers.bat

@@ -477,7 +477,7 @@ class SystemChecker:
             print("✅ Job Application Helper is ready to use!")
             print("\n📋 Next Steps:")
             print("  1. Copy env.example to .env and add your API keys")
-            print("  2. Launch the application with './launch_app.sh' (or launch_app.bat on Windows)")
+            print("  2. Launch the application with './launch_app-uv.sh' (or launch_app.bat on Windows)")
             print("  3. Check README.md for usage instructions")
         else:
             print(f"\n⚠️  {total - passed} ISSUES FOUND")

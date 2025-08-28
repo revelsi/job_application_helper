@@ -137,7 +137,7 @@ def show_next_steps():
         "1. Ensure .env file is configured with your API keys",
         "2. Run 'python scripts/check_system.py' to verify setup",
         "3. Check README.md for usage instructions",
-        "4. Launch the application with './launch_app.sh' (or launch_app.bat on Windows)",
+        "4. Launch the application with './launch_app-uv.sh' (or launch_app.bat on Windows)",
     ]
 
     for step in steps:

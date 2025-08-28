@@ -1,5 +1,5 @@
 #!/bin/bash
-# Run backend scripts with UV (modern Python package manager)
+# Run backend scripts and tests with UV (modern Python package manager)
 
 # Ensure we're in the backend directory
 cd "$(dirname "$0")"
@@ -15,12 +15,64 @@ if ! command -v uv &> /dev/null; then
     exit 1
 fi
 
-# Run the specified script
-if [ $# -eq 0 ]; then
-    echo "Usage: $0 <script_name> [arguments...]"
-    echo "Example: $0 scripts/check_system.py"
-    exit 1
-fi
+# Function to show usage
+show_usage() {
+    echo "Usage: $0 <command> [arguments...]"
+    echo ""
+    echo "Commands:"
+    echo "  script <script_name> [args...]  Run a Python script"
+    echo "  test [pytest_args...]           Run tests"
+    echo "  check                           Run system check script"
+    echo "  status                          Run status script"
+    echo "  list-docs                       List documents"
+    echo "  evaluate                        Run system evaluation"
+    echo ""
+    echo "Examples:"
+    echo "  $0 script scripts/check_system.py"
+    echo "  $0 test tests/test_credentials.py"
+    echo "  $0 test -v"
+    echo "  $0 check"
+}
 
-echo "🔧 Running script with UV..."
-uv run python "$@" 
+# Main execution
+case "${1:-}" in
+    script)
+        if [ $# -lt 2 ]; then
+            echo "❌ Script name required"
+            show_usage
+            exit 1
+        fi
+        shift
+        echo "🔧 Running script with UV..."
+        uv run python "$@"
+        ;;
+    test)
+        shift
+        echo "🧪 Running tests with UV..."
+        uv run python -m pytest tests "$@"
+        ;;
+    check)
+        echo "🔍 Running system check..."
+        uv run python scripts/check_system.py
+        ;;
+    status)
+        echo "📊 Running status check..."
+        uv run python scripts/status.py
+        ;;
+    list-docs)
+        echo "📄 Listing documents..."
+        uv run python scripts/list_documents.py
+        ;;
+    evaluate)
+        echo "📈 Running system evaluation..."
+        uv run python scripts/evaluate_system.py
+        ;;
+    help|--help|-h)
+        show_usage
+        ;;
+    *)
+        echo "❌ Unknown command: $1"
+        show_usage
+        exit 1
+        ;;
+esac 
