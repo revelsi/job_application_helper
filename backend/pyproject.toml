@@ -143,6 +143,7 @@ Issues = "https://github.com/your-username/job-application-helper/issues"
 
 [dependency-groups]
 dev = [
+    "pytest>=8.4.1",
     "ruff>=0.12.9",
 ]
 

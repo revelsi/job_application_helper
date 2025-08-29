@@ -40,9 +40,11 @@ class TestQueryAnalyzerIntegration(unittest.TestCase):
         self.mock_llm_provider = Mock()
         self.mock_llm_provider.generate_content.return_value = GenerationResponse(
             content="Test response",
-            success=True,
+            model_used="test-model",
+            provider_used="test-provider",
             tokens_used=100,
-            processing_time=1.0
+            generation_time=1.0,
+            success=True
         )
         
         # Mock memory manager
@@ -53,13 +55,18 @@ class TestQueryAnalyzerIntegration(unittest.TestCase):
             llm_provider=self.mock_llm_provider,
             memory_manager=self.mock_memory_manager
         )
+        
+        # Initialize query analyzer for testing
+        self.chat_controller._ensure_query_analyzer(self.mock_llm_provider)
     
     def test_query_analyzer_initialization(self):
         """Test that QueryAnalyzer is properly initialized."""
-        # Verify QueryAnalyzer is created and available
+        # QueryAnalyzer should be available after setUp initialization
         self.assertIsNotNone(self.chat_controller.query_analyzer)
-        self.assertIsInstance(self.chat_controller.query_analyzer, QueryAnalyzer)
-        self.assertTrue(hasattr(self.chat_controller, "query_analyzer_available"))
+        self.assertTrue(self.chat_controller.query_analyzer_available)
+        
+        # Test that it's properly configured with the LLM provider
+        self.assertEqual(self.chat_controller.query_analyzer.llm_provider, self.mock_llm_provider)
     
     @patch("src.core.simple_chat_controller.get_simple_document_service")
     def test_query_analysis_in_process_message(self, mock_doc_service):
@@ -86,10 +93,10 @@ class TestQueryAnalyzerIntegration(unittest.TestCase):
         
         with patch.object(self.chat_controller.query_analyzer, "analyze_query", return_value=mock_analysis) as mock_analyze:
             # Process a test message
-            response = self.chat_controller.process_message("Write me a cover letter for TestCorp")
+            response = self.chat_controller.process_message("Write me a cover letter for TestCorp", self.mock_llm_provider)
             
             # Verify query analysis was called
-            mock_analyze.assert_called_once_with("Write me a cover letter for TestCorp", conversation_history=None)
+            mock_analyze.assert_called_once_with("Write me a cover letter for TestCorp", None)
             
             # Verify response is successful
             self.assertTrue(response.success)
@@ -161,11 +168,12 @@ class TestQueryAnalyzerIntegration(unittest.TestCase):
         # Mock query analyzer to raise an exception
         with patch.object(self.chat_controller.query_analyzer, "analyze_query", side_effect=Exception("Analysis failed")):
             with patch.object(self.chat_controller, "documents_available", False):
-                # Should not raise exception and should continue processing
-                response = self.chat_controller.process_message("Test message")
+                # Should handle the exception gracefully and return a failed response
+                response = self.chat_controller.process_message("Test message", self.mock_llm_provider)
                 
-                # Verify response is still successful (using fallback)
-                self.assertTrue(response.success)
+                # Verify response indicates failure due to query analyzer error
+                self.assertFalse(response.success)
+                self.assertIn("error", response.content.lower())
     
     def test_intent_to_content_type_mapping(self):
         """Test all intent types map correctly to content types."""

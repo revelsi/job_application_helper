@@ -23,8 +23,8 @@ and checking availability.
 
 from typing import List, Optional
 
-import httpx
 from fastapi import APIRouter, HTTPException
+import httpx
 from pydantic import BaseModel, Field
 
 from src.core.llm_providers.ollama_provider import get_ollama_provider

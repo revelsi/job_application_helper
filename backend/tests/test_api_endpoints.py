@@ -1,4 +1,4 @@
-h a"""
+"""
 Copyright 2024 Job Application Helper Contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,20 +25,14 @@ This module tests:
 - Error handling and validation
 """
 
-import json
-import tempfile
-from pathlib import Path
-from unittest.mock import Mock, patch
 from datetime import datetime
+from pathlib import Path
+import tempfile
+from unittest.mock import Mock, patch
 
-import pytest
 from fastapi.testclient import TestClient
-from fastapi import HTTPException
 
 from src.api.main import app
-from src.api.models import ChatRequest, DocumentUploadResponse
-from src.core.llm_providers.base import GenerationResponse, ProviderType
-from src.api.models import ChatResponse
 
 
 class TestHealthEndpoint:
