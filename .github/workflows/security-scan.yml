@@ -249,7 +249,7 @@ jobs:
     - name: Build Docker images
       run: |
         docker build -t job-helper-backend ./backend
-        docker build -f ./frontend/Dockerfile.prod -t job-helper-frontend ./frontend
+        docker build -f ./frontend/Dockerfile -t job-helper-frontend ./frontend
 
     - name: Run Trivy vulnerability scanner
       uses: aquasecurity/trivy-action@master

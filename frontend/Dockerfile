@@ -7,6 +7,10 @@ FROM node:18-alpine AS builder
 # Set environment variables
 ENV NODE_ENV=production
 
+# Build argument for API URL
+ARG VITE_API_BASE_URL=http://localhost:8000
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+
 # Install system dependencies
 RUN apk add --no-cache curl
 
@@ -39,19 +43,6 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 
 # Copy custom nginx configuration
 COPY nginx.conf /etc/nginx/nginx.conf
-
-# Create non-root user
-RUN addgroup -g 1001 -S appuser && \
-    adduser -S appuser -u 1001 -G appuser
-
-# Set proper permissions
-RUN chown -R appuser:appuser /usr/share/nginx/html && \
-    chown -R appuser:appuser /var/cache/nginx && \
-    chown -R appuser:appuser /var/log/nginx && \
-    chown -R appuser:appuser /etc/nginx/conf.d
-
-# Switch to non-root user
-USER appuser
 
 # Expose port
 EXPOSE 8080
