@@ -212,6 +212,23 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
         rate_limit_rpm=1000,  # Local limit
         description="Llama 3.2 (1B) - Local lightweight open-source language model with 128K context",
     ),
+    
+    "hf.co/LiquidAI/LFM2-1.2B-GGUF:Q4_K_M": ModelConfig(
+        name="hf.co/LiquidAI/LFM2-1.2B-GGUF:Q4_K_M",
+        display_name="LFM2-1.2B-Q4",
+        provider="ollama",
+        model_type=ModelType.STANDARD,
+        supports_streaming=True,
+        supports_function_calling=False,
+        supports_reasoning=False,
+        max_input_tokens=32768,  # 32K context window per official docs
+        max_output_tokens=8192,
+        max_total_tokens=40960,
+        cost_per_1k_input_tokens=0.0,  # Local model
+        cost_per_1k_output_tokens=0.0,
+        rate_limit_rpm=1000,  # Local limit
+        description="LFM2-1.2B-Q4 - Local lightweight language model with Q4 quantization",
+    ),
 }
 
 

@@ -116,7 +116,7 @@ class OllamaProvider(LLMProvider):
                 available_model_names = [m["name"] for m in available_models]
                 
                 # Check if at least one of the required models is available
-                required_models = ["gemma3:1b", "llama3.2:1b"]
+                required_models = ["gemma3:1b", "llama3.2:1b", "hf.co/LiquidAI/LFM2-1.2B-GGUF:Q4_K_M"]
                 has_required_model = any(model in available_model_names for model in required_models)
                 
                 if not has_required_model:

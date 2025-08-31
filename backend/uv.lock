@@ -1851,6 +1851,7 @@ evaluation = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "coverage" },
     { name = "pytest" },
     { name = "ruff" },
 ]
@@ -1917,6 +1918,7 @@ provides-extras = ["dev", "evaluation"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "coverage", specifier = ">=7.10.4" },
     { name = "pytest", specifier = ">=8.4.1" },
     { name = "ruff", specifier = ">=0.12.9" },
 ]

@@ -81,7 +81,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSendMessage, isL
       { key: 'openai', name: 'OpenAI', models: ['gpt-5-mini'] },
       { key: 'mistral', name: 'Mistral', models: ['mistral-small-latest', 'mistral-medium-latest'] },
       { key: 'novita', name: 'Novita', models: ['openai/gpt-oss-20b', 'qwen/qwen3-32b-fp8', 'zai-org/glm-4.5'] },
-      { key: 'ollama', name: 'Ollama (Local)', models: ['gemma3:1b', 'llama3.2:1b'] },
+      { key: 'ollama', name: 'Ollama (Local)', models: ['gemma3:1b', 'llama3.2:1b', 'hf.co/LiquidAI/LFM2-1.2B-GGUF:Q4_K_M'] },
     ];
 
     return providers.filter(provider => 

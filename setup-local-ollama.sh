@@ -61,6 +61,9 @@ ollama pull gemma3:1b
 echo "   Downloading llama3.2:1b (1.3GB)..."
 ollama pull llama3.2:1b
 
+echo "   Downloading LFM2-1.2B-GGUF (730MB)..."
+ollama pull hf.co/LiquidAI/LFM2-1.2B-GGUF:Q4_K_M
+
 # Verify models are downloaded
 echo "🔍 Verifying models..."
 ollama list

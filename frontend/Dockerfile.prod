@@ -21,7 +21,6 @@ RUN npm ci --include=dev && npm cache clean --force
 
 # Copy source code
 COPY src/ ./src/
-COPY public/ ./public/
 COPY index.html .
 COPY *.config.* ./
 COPY tsconfig*.json ./

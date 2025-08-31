@@ -177,13 +177,13 @@ async def get_ollama_status():
                 "message": "Ollama service is not running. Please start Ollama with 'ollama serve'",
                 "available_models": 0,
                 "models": [],
-                "required_models": ["gemma3:1b", "llama3.2:1b"]
+                "required_models": ["gemma3:1b", "llama3.2:1b", "hf.co/LiquidAI/LFM2-1.2B-GGUF:Q4_K_M"]
             }
         
         # Check if required models are available
         models = provider._get_available_models()
         available_model_names = [model["name"] for model in models]
-        required_models = ["gemma3:1b", "llama3.2:1b"]
+        required_models = ["gemma3:1b", "llama3.2:1b", "hf.co/LiquidAI/LFM2-1.2B-GGUF:Q4_K_M"]
         missing_models = [model for model in required_models if model not in available_model_names]
         
         if missing_models:
@@ -211,5 +211,5 @@ async def get_ollama_status():
             "message": f"Failed to check Ollama status: {e!s}",
             "available_models": 0,
             "models": [],
-            "required_models": ["gemma3:1b", "llama3.2:1b"]
+            "required_models": ["gemma3:1b", "llama3.2:1b", "hf.co/LiquidAI/LFM2-1.2B-GGUF:Q4_K_M"]
         }
