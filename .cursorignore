@@ -19,11 +19,7 @@ auth.json
 config.json
 
 # Security reports and scans
-security-reports/
-*.security.json
-security_audit_*.json
-bandit_results.json
-bandit_report.json
+# Note: Security reports are now visible to Cursor for proactive security improvements
 
 # User data and documents
 data/documents/

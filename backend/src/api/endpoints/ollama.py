@@ -23,7 +23,7 @@ and checking availability.
 
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Path
 import httpx
 from pydantic import BaseModel, Field
 
@@ -129,8 +129,14 @@ async def download_model(request: ModelDownloadRequest):
 
 
 @router.get("/models/{model_name}/status")
-async def check_model_status(model_name: str):
+async def check_model_status(
+    model_name: str = Path(..., regex="^[a-zA-Z0-9._:-]+$", min_length=1, max_length=100)
+):
     """Check if a specific model is available."""
+    # Additional validation for model name
+    if not model_name.strip():
+        raise HTTPException(status_code=400, detail="Model name cannot be empty")
+    
     try:
         provider = get_ollama_provider()
         if not provider.is_available():

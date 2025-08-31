@@ -21,8 +21,10 @@ Provides endpoints for retrieving model configurations and capabilities.
 """
 
 from typing import Any, Dict, List
+import re
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Path
+from pydantic import validator
 
 from src.core.llm_providers.model_config import (
     get_model_display_info,
@@ -49,8 +51,18 @@ async def get_provider_models() -> Dict[str, List[Dict[str, Any]]]:
 
 
 @router.get("/provider/{provider}")
-async def get_models_for_provider_endpoint(provider: str) -> List[Dict[str, Any]]:
+async def get_models_for_provider_endpoint(
+    provider: str = Path(..., regex="^[a-zA-Z0-9_-]+$", min_length=1, max_length=50)
+) -> List[Dict[str, Any]]:
     """Get models for a specific provider with display information."""
+    # Validate provider name against allowed providers
+    allowed_providers = ["openai", "mistral", "novita", "ollama"]
+    if provider not in allowed_providers:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Invalid provider '{provider}'. Allowed providers: {', '.join(allowed_providers)}"
+        )
+    
     models = get_models_for_provider(provider)
     model_info = []
     
@@ -62,6 +74,21 @@ async def get_models_for_provider_endpoint(provider: str) -> List[Dict[str, Any]
 
 
 @router.get("/info/{model_name}")
-async def get_model_info(model_name: str) -> Dict[str, Any]:
+async def get_model_info(
+    model_name: str = Path(..., regex="^[a-zA-Z0-9._-]+$", min_length=1, max_length=100)
+) -> Dict[str, Any]:
     """Get detailed information about a specific model."""
-    return get_model_display_info(model_name)
+    # Sanitize model name to prevent injection
+    if not re.match(r"^[a-zA-Z0-9._-]+$", model_name):
+        raise HTTPException(
+            status_code=400, 
+            detail="Invalid model name format. Only alphanumeric characters, dots, underscores, and hyphens allowed."
+        )
+    
+    try:
+        model_info = get_model_display_info(model_name)
+        if not model_info:
+            raise HTTPException(status_code=404, detail=f"Model '{model_name}' not found")
+        return model_info
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving model info: {str(e)}")
