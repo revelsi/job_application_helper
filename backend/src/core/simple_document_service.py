@@ -313,19 +313,22 @@ class SimpleDocumentService:
 
         return documents[:limit]
 
-    def get_relevant_context(
+
+
+    def get_document_context(
         self,
-        query: str,
         max_context_length: int = 100000,  # Updated for GPT-5-mini 128K context
         max_candidate_doc_length: int = 50000,  # Allow full CV content
         max_job_doc_length: int = 30000,  # Allow detailed job descriptions
         max_company_doc_length: int = 20000,  # Allow comprehensive company info
     ) -> Dict[str, Any]:
         """
-        Get relevant document context for LLM prompting.
+        Get document context for LLM prompting - simple and honest.
+        
+        Just gets the most recent documents from each category and includes them.
+        The LLM is smart enough to figure out what's relevant.
 
         Args:
-            query: User query
             max_context_length: Maximum total context length in characters
             max_candidate_doc_length: Maximum length per candidate document
             max_job_doc_length: Maximum length per job document
@@ -334,49 +337,49 @@ class SimpleDocumentService:
         Returns:
             Dictionary with context information
         """
-        # Get documents from all categories
-        candidate_docs = self.get_candidate_documents(limit=5)
-        job_docs = self.get_job_documents(limit=5)
-        company_docs = self.get_company_documents(limit=5)
+        # Get recent documents from each category - simple and predictable
+        candidate_docs = self.get_candidate_documents(limit=3)
+        job_docs = self.get_job_documents(limit=3)
+        company_docs = self.get_company_documents(limit=3)
 
         # Build context sections
         context_sections = []
         current_length = 0
 
-        # Add candidate information
+        # Add candidate information (most recent first)
         if candidate_docs:
             context_sections.append("### Your Background & Experience:")
-            for doc in candidate_docs[:3]:  # Limit to top 3
+            for doc in candidate_docs:
                 if current_length + len(doc.content) > max_context_length:
                     break
                 context_sections.append(f"**{doc.metadata.original_filename}:**")
-                # Use configurable limit instead of hard-coded 2000
+                # Truncate to max length
                 doc_content = doc.content[:max_candidate_doc_length]
                 context_sections.append(doc_content)
                 current_length += len(doc_content)
             context_sections.append("")
 
-        # Add job information
+        # Add job information (most recent first)
         if job_docs:
             context_sections.append("### Job Information:")
-            for doc in job_docs[:2]:  # Limit to top 2
+            for doc in job_docs:
                 if current_length + len(doc.content) > max_context_length:
                     break
                 context_sections.append(f"**{doc.metadata.original_filename}:**")
-                # Use configurable limit instead of hard-coded 2000
+                # Truncate to max length
                 doc_content = doc.content[:max_job_doc_length]
                 context_sections.append(doc_content)
                 current_length += len(doc_content)
             context_sections.append("")
 
-        # Add company information
+        # Add company information (most recent first)
         if company_docs:
             context_sections.append("### Company Information:")
-            for doc in company_docs[:2]:  # Limit to top 2
+            for doc in company_docs:
                 if current_length + len(doc.content) > max_context_length:
                     break
                 context_sections.append(f"**{doc.metadata.original_filename}:**")
-                # Use configurable limit instead of hard-coded 1500
+                # Truncate to max length
                 doc_content = doc.content[:max_company_doc_length]
                 context_sections.append(doc_content)
                 current_length += len(doc_content)
@@ -397,7 +400,7 @@ class SimpleDocumentService:
             )
 
         return {
-            "query": query,
+            "query": "",  # Query is no longer used for retrieval
             "context_text": context_text,
             "context_length": len(context_text),
             "source_documents": source_documents,

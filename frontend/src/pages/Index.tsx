@@ -38,7 +38,7 @@ interface DocumentUploadResponse {
   error?: string;
   metadata?: {
     tags?: string[];
-    [key: string]: any;
+    [key: string]: unknown;
   };
 }
 

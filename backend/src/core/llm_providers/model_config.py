@@ -72,6 +72,23 @@ class ModelConfig:
 MODEL_CONFIGS: Dict[str, ModelConfig] = {
     
     # OpenAI Models
+    "gpt-5-nano": ModelConfig(
+        name="gpt-5-nano",
+        display_name="GPT-5 Nano",
+        provider="openai",
+        model_type=ModelType.REASONING,
+        supports_streaming=True,
+        supports_function_calling=True,
+        supports_reasoning=True,
+        max_input_tokens=128000,
+        max_output_tokens=8192,
+        max_total_tokens=136192,
+        cost_per_1k_input_tokens=0.00005,  # Even cheaper than mini
+        cost_per_1k_output_tokens=0.0002,  # Even cheaper than mini
+        rate_limit_rpm=2000,  # Higher rate limit for nano
+        reasoning_format="structured",
+        description="GPT-5 Nano - fastest, cheapest reasoning model for analysis tasks",
+    ),
     "gpt-5-mini": ModelConfig(
         name="gpt-5-mini",
         display_name="GPT-5 Mini",

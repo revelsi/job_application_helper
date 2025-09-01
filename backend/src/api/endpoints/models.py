@@ -91,4 +91,4 @@ async def get_model_info(
             raise HTTPException(status_code=404, detail=f"Model '{model_name}' not found")
         return model_info
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error retrieving model info: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error retrieving model info: {str(e)}") from e

@@ -106,7 +106,7 @@ async def get_api_key_status():
         )
     except Exception as e:
         logger.error(f"Error getting API key status: {e}")
-        raise HTTPException(status_code=500, detail="Failed to get API key status")
+        raise HTTPException(status_code=500, detail="Failed to get API key status") from e
 
 
 @router.get("/providers", response_model=List[Dict])
@@ -127,7 +127,7 @@ async def get_provider_info():
         logger.error(f"Error getting provider info: {e}")
         raise HTTPException(
             status_code=500, detail="Failed to get provider information"
-        )
+        ) from e
 
 
 @router.post("/set", response_model=APIKeyResponse)
@@ -189,7 +189,7 @@ async def set_api_key(request: APIKeyRequest):
         raise
     except Exception as e:
         logger.error(f"Error setting API key for {request.provider}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to set API key")
+        raise HTTPException(status_code=500, detail="Failed to set API key") from e
 
 
 @router.delete("/{provider}", response_model=APIKeyResponse)
@@ -232,7 +232,7 @@ async def remove_api_key(provider: str):
         raise
     except Exception as e:
         logger.error(f"Error removing API key for {provider}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to remove API key")
+        raise HTTPException(status_code=500, detail="Failed to remove API key") from e
 
 
 @router.post("/test/{provider}", response_model=APIKeyResponse)
@@ -299,4 +299,4 @@ async def test_api_key(provider: str):
         raise
     except Exception as e:
         logger.error(f"Error testing API key for {provider}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to test API key")
+        raise HTTPException(status_code=500, detail="Failed to test API key") from e

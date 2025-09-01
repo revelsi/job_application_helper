@@ -58,7 +58,7 @@ async def clear_job_documents(
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Failed to clear job documents: {e}"
-        )
+        ) from e
 
 
 @router.delete("/clear/company")
@@ -76,7 +76,7 @@ async def clear_company_documents(
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Failed to clear company documents: {e}"
-        )
+        ) from e
 
 
 @router.get("/list")
@@ -95,10 +95,24 @@ async def list_documents(
                 document_type=doc_type, limit=100
             )
             for doc in docs:
+                # Normalize fields to match API tests expectations
+                upload_ts = None
+                if hasattr(doc, "upload_timestamp") and doc.upload_timestamp is not None:
+                    try:
+                        upload_ts = doc.upload_timestamp.isoformat()
+                    except Exception:
+                        upload_ts = str(doc.upload_timestamp)
+                elif hasattr(doc, "upload_date") and doc.upload_date is not None:
+                    try:
+                        upload_ts = doc.upload_date.isoformat()
+                    except Exception:
+                        upload_ts = str(doc.upload_date)
+
                 documents.append(
                     {
                         "id": doc.id,
-                        "filename": doc.original_filename,
+                        "filename": getattr(doc, "filename", doc.original_filename),
+                        "original_filename": doc.original_filename,
                         "type": doc.document_type.value,
                         "category": (
                             "personal"
@@ -111,15 +125,15 @@ async def list_documents(
                             ]
                             else "job-specific"
                         ),
-                        "upload_date": doc.upload_date.isoformat(),
-                        "size": doc.file_size,
+                        "upload_timestamp": upload_ts,
+                        "file_size": doc.file_size,
                         "tags": doc.tags or [],
                     }
                 )
 
         return {"success": True, "documents": documents}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to list documents: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to list documents: {e}") from e
 
 
 @router.post("/upload", response_model=DocumentUploadResponse)
@@ -137,7 +151,7 @@ async def upload_document(
             return await upload_job_document(file, document_handler)
         raise HTTPException(status_code=400, detail=f"Invalid category: {category}")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/upload/candidate", response_model=DocumentUploadResponse)
@@ -192,7 +206,7 @@ async def upload_candidate_document(
             if tmp_file_path.exists():
                 os.unlink(tmp_file_path)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/upload/job", response_model=DocumentUploadResponse)
@@ -244,7 +258,7 @@ async def upload_job_document(
             if tmp_file_path.exists():
                 os.unlink(tmp_file_path)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.delete("/delete/{document_id}")
@@ -259,7 +273,7 @@ async def delete_document(
             return {"success": True, "message": "Document deleted successfully"}
         return {"success": False, "message": "Document not found or deletion failed"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to delete document: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete document: {e}") from e
 
 
 @router.get("/stats")
@@ -270,4 +284,4 @@ async def get_document_stats():
         stats = service.get_stats()
         return {"success": True, "stats": stats}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get stats: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get stats: {e}") from e

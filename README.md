@@ -114,10 +114,9 @@ npm run dev
 ## AI Provider Notes
 
 **Cloud AI Providers (Recommended):**
-- **OpenAI**: GPT-4 models with reasoning capabilities
-- **Anthropic**: Claude models with reasoning capabilities  
-- **Mistral AI**: High-performance models with reasoning capabilities
-- **Novita**: GPT-OSS-20B model with reasoning capabilities
+- **OpenAI**: GPT-5-mini with reasoning capabilities
+- **Mistral AI**: Small/Medium models with function calling
+- **Novita**: Open-source models (GPT-OSS-20B, Qwen3-32B, GLM-4.5)
 
 **Local LLMs (Ollama):**
 - **GPU Support**: Local Ollama with GPU acceleration (Apple Silicon/NVIDIA)
@@ -126,7 +125,7 @@ npm run dev
 ## Features
 - Upload PDF, DOCX, TXT files
 - AI chat with document context using multiple providers:
-  - **Cloud AI**: OpenAI (GPT-4), Anthropic (Claude), Mistral AI, Novita (GPT-OSS-20B)
+  - **Cloud AI**: OpenAI (GPT-5-mini), Mistral AI, Novita (open-source models)
   - **Local LLMs**: Ollama (Gemma 3, Llama 3.2) with GPU acceleration
 - Local document storage and processing
 - Encrypted API key storage

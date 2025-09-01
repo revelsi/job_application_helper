@@ -149,30 +149,7 @@ class NovitaProvider(LLMProvider):
             self.logger.info("Novita async client initialized")
         return self._async_client
 
-    def _build_messages(self, request: GenerationRequest) -> List[Dict[str, Any]]:
-        """Build messages in OpenAI format for Novita API."""
-        messages = []
-        
-        # Build context-aware system prompt
-        system_prompt = self._get_system_prompt(request.content_type, request.context)
-        
-        # Add context if provided
-        if request.context:
-            context_parts = []
-            for key, value in request.context.items():
-                if value and isinstance(value, str) and len(value.strip()) > 0:
-                    context_parts.append(f"{key.replace('_', ' ').title()}: {value}")
 
-            if context_parts:
-                system_prompt += "\n\nContext:\n" + "\n".join(context_parts)
-
-        # Add system message
-        messages.append({"role": "system", "content": system_prompt})
-        
-        # Add user message
-        messages.append({"role": "user", "content": request.prompt})
-        
-        return messages
 
     def _make_api_call(
         self,

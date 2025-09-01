@@ -82,7 +82,7 @@ async def list_available_models():
         raise HTTPException(
             status_code=500,
             detail=f"Failed to list models: {e!s}"
-        )
+        ) from e
 
 
 @router.post("/models/download", response_model=ModelDownloadResponse)
@@ -125,7 +125,7 @@ async def download_model(request: ModelDownloadRequest):
         raise HTTPException(
             status_code=500,
             detail=f"Failed to download model: {e!s}"
-        )
+        ) from e
 
 
 @router.get("/models/{model_name}/status")
@@ -160,7 +160,7 @@ async def check_model_status(
         raise HTTPException(
             status_code=500,
             detail=f"Failed to check model status: {e!s}"
-        )
+        ) from e
 
 
 @router.get("/status")

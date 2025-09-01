@@ -145,33 +145,7 @@ class OpenAIProvider(LLMProvider):
             self.logger.info("OpenAI client initialized")
         return self._client
 
-    def _build_messages(self, request: GenerationRequest) -> List[Dict[str, Any]]:
-        """Build messages in OpenAI format."""
-        messages = []
 
-        # Add system message with context-aware prompts
-        system_prompt = self._get_system_prompt(request.content_type, request.context)
-        messages.append({"role": "system", "content": system_prompt})
-
-        # Add context if provided (excluding system prompt context)
-        if request.context:
-            context_parts = []
-            for key, value in request.context.items():
-                if value and key not in [
-                    "industry",
-                    "experience_level",
-                    "company_size",
-                ]:  # Skip system prompt context
-                    context_parts.append(f"{key.replace('_', ' ').title()}: {value}")
-
-            if context_parts:
-                context_message = "Context:\n" + "\n".join(context_parts)
-                messages.append({"role": "user", "content": context_message})
-
-        # Add main prompt
-        messages.append({"role": "user", "content": request.prompt})
-
-        return messages
 
     def _make_api_call(
         self,

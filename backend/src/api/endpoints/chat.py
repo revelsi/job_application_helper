@@ -150,6 +150,7 @@ async def chat_stream(
             
             # Accumulate the complete response
             complete_response = ""
+            chunks_emitted = False
             
             # Process the message with the specific provider
             logger.info("🚀 Starting chat_controller.process_message_stream...")
@@ -162,18 +163,46 @@ async def chat_stream(
                 reasoning_effort=request.reasoning_effort,
             ):
                 logger.debug(f"📦 Chat endpoint received chunk: {chunk[:50]}...")
+                chunks_emitted = True
                 complete_response += chunk
                 yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
             
-            # Send final complete answer
-            yield f"data: {json.dumps({'type': 'answer', 'content': complete_response})}\n\n"
+            # If no chunks were emitted, fall back to non-streaming generation
+            if not chunks_emitted:
+                logger.info("⚠️ No stream chunks emitted; falling back to non-streaming response")
+                try:
+                    non_stream_resp = chat_controller.process_message(
+                        message=request.message,
+                        llm_provider=llm_provider,
+                        conversation_history=request.conversation_history,
+                        session_id=request.session_id,
+                        model=request.model,
+                        reasoning_effort=request.reasoning_effort,
+                    )
+                    fallback_content = non_stream_resp.content or ""
+                    if fallback_content:
+                        # Send fallback content as a single chunk
+                        yield f"data: {json.dumps({'type': 'chunk', 'content': fallback_content})}\n\n"
+                except Exception as e:
+                    logger.error(f"❌ Fallback non-streaming generation failed: {e}")
+                    yield f"data: {json.dumps({'type': 'error', 'content': 'Failed to generate response'})}\n\n"
+
+            # Send completion signal
             yield "data: [DONE]\n\n"
 
         except Exception as e:
             logger.error(f"❌ Chat streaming failed: {e}")
             yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
     
-    return StreamingResponse(generate_stream(), media_type="text/event-stream")
+    return StreamingResponse(
+        generate_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 class ClearSessionRequest(BaseModel):
@@ -204,4 +233,4 @@ async def clear_chat_session(
 
     except Exception as e:
         logger.error(f"💥 Error in clear_chat_session: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e

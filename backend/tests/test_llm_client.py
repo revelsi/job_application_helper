@@ -274,7 +274,7 @@ class TestProviderArchitecture:
 
     def test_generation_request_validation(self):
         """Test GenerationRequest validation."""
-        # Valid request
+        # Valid legacy request with prompt
         request = GenerationRequest(
             prompt="Test prompt",
             content_type=ContentType.GENERAL_RESPONSE,
@@ -283,9 +283,48 @@ class TestProviderArchitecture:
         )
 
         assert request.prompt == "Test prompt"
+        assert request.messages is None
         assert request.content_type == ContentType.GENERAL_RESPONSE
         assert request.max_tokens == 100
         assert request.temperature == 0.7
+
+        # Valid new request with messages
+        messages_request = GenerationRequest(
+            messages=[
+                {"role": "system", "content": "You are helpful"},
+                {"role": "user", "content": "Hello"}
+            ],
+            content_type=ContentType.GENERAL_RESPONSE,
+            max_tokens=100,
+            temperature=0.7,
+        )
+
+        assert messages_request.messages is not None
+        assert messages_request.prompt is None
+        assert len(messages_request.messages) == 2
+        assert messages_request.messages[0]["role"] == "system"
+
+    def test_generation_request_validation_errors(self):
+        """Test GenerationRequest validation errors."""
+        # Should fail with neither prompt nor messages
+        try:
+            GenerationRequest(
+                content_type=ContentType.GENERAL_RESPONSE
+            )
+            assert False, "Should have raised ValueError"
+        except ValueError as e:
+            assert "Either 'prompt' or 'messages' must be provided" in str(e)
+
+        # Should fail with both prompt and messages
+        try:
+            GenerationRequest(
+                prompt="Test prompt",
+                messages=[{"role": "user", "content": "Hello"}],
+                content_type=ContentType.GENERAL_RESPONSE
+            )
+            assert False, "Should have raised ValueError"
+        except ValueError as e:
+            assert "Provide either 'prompt' or 'messages', not both" in str(e)
 
     def test_provider_capabilities(self):
         """Test provider capabilities structure."""

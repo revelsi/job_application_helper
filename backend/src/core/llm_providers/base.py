@@ -56,14 +56,22 @@ class ContentType(Enum):
 class GenerationRequest:
     """Request for content generation."""
 
-    prompt: str
-    content_type: ContentType
+    prompt: Optional[str] = None  # Legacy single prompt string (deprecated)
+    messages: Optional[List[Dict[str, str]]] = None  # Modern message structure (preferred)
+    content_type: ContentType = ContentType.GENERAL_RESPONSE
     max_tokens: Optional[int] = None
     temperature: float = 0.7
     model: Optional[str] = None  # Provider-specific model name
     context: Optional[Dict[str, Any]] = None
     reasoning_effort: Optional[str] = None  # For reasoning models: 'minimal', 'low', 'medium', 'high'
     verbosity: Optional[str] = None  # For GPT-5 models: 'low', 'medium', 'high'
+    
+    def __post_init__(self):
+        """Validate that either prompt or messages is provided."""
+        if not self.prompt and not self.messages:
+            raise ValueError("Either 'prompt' or 'messages' must be provided")
+        if self.prompt and self.messages:
+            raise ValueError("Provide either 'prompt' or 'messages', not both")
 
 
 @dataclass
@@ -133,10 +141,37 @@ class LLMProvider(ABC):
         """Get the default model for this provider."""
         pass
 
-    @abstractmethod
     def _build_messages(self, request: GenerationRequest) -> List[Dict[str, Any]]:
-        """Build messages in provider-specific format."""
-        pass
+        """
+        Build messages in provider-specific format.
+        
+        Handles both legacy prompt strings and modern message arrays.
+        Subclasses can override for provider-specific formatting.
+        """
+        if request.messages:
+            # Modern message structure - use directly
+            self.logger.debug(f"Using modern message structure with {len(request.messages)} messages")
+            return [{"role": msg["role"], "content": msg["content"]} for msg in request.messages]
+        elif request.prompt:
+            # Legacy prompt string - convert to user message with system prompt
+            self.logger.debug("Converting legacy prompt to message structure")
+            messages = []
+            
+            # Add system message with context-aware prompts
+            system_prompt = self._get_system_prompt(request.content_type, request.context)
+            messages.append({"role": "system", "content": system_prompt})
+            
+            # Add context if provided
+            if request.context and request.context.get("context_text"):
+                context_message = f"Context:\n{request.context['context_text']}"
+                messages.append({"role": "user", "content": context_message})
+            
+            # Add main prompt
+            messages.append({"role": "user", "content": request.prompt})
+            
+            return messages
+        else:
+            raise ValueError("Neither messages nor prompt provided in request")
 
     @abstractmethod
     def _make_api_call(
@@ -182,7 +217,7 @@ class LLMProvider(ABC):
         content_to_prompt_map = {
             ContentType.COVER_LETTER: PromptType.COVER_LETTER,
             ContentType.INTERVIEW_ANSWER: PromptType.INTERVIEW_ANSWER,
-            ContentType.CONTENT_REFINEMENT: PromptType.CONTENT_REFINEMENT,
+            ContentType.CONTENT_REFINEMENT: PromptType.GENERAL_RESPONSE,
             ContentType.GENERAL_RESPONSE: PromptType.GENERAL_RESPONSE,
         }
 
@@ -364,7 +399,7 @@ class LLMProvider(ABC):
             "original_content": original_content,
         }
         prompt = self.prompt_manager.build_user_prompt(
-            PromptType.CONTENT_REFINEMENT, variables
+            PromptType.GENERAL_RESPONSE, variables
         )
 
         request = GenerationRequest(

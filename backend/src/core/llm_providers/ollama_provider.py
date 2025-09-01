@@ -232,29 +232,7 @@ class OllamaProvider(LLMProvider):
 
 
 
-    def _build_messages(self, request: GenerationRequest) -> List[Dict[str, Any]]:
-        """Build messages in Ollama format."""
-        messages = []
 
-        # Add system message with context-aware prompts
-        system_prompt = self._get_system_prompt(request.content_type, request.context)
-        messages.append({"role": "system", "content": system_prompt})
-
-        # Add context if provided
-        if request.context:
-            context_parts = []
-            for key, value in request.context.items():
-                if value and isinstance(value, str) and len(value.strip()) > 0:
-                    context_parts.append(f"{key.replace('_', ' ').title()}: {value}")
-
-            if context_parts:
-                context_message = "Context:\n" + "\n".join(context_parts)
-                messages.append({"role": "user", "content": context_message})
-
-        # Add main prompt
-        messages.append({"role": "user", "content": request.prompt})
-
-        return messages
 
     def _make_api_call(
         self,

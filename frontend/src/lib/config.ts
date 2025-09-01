@@ -33,7 +33,7 @@ export const config: AppConfig = {
   apiBaseUrl: getApiBaseUrl(),
   isDevelopment: import.meta.env.DEV,
   isProduction: import.meta.env.PROD,
-  requestTimeout: 30000, // 30 seconds
+  requestTimeout: 90000, // 90 seconds to support long-lived streams
   maxRetries: 3
 };
 

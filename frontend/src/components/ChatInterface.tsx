@@ -174,7 +174,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSendMessage, isL
 
     try {
       // Use secure API client for streaming
-      const requestData: any = {
+      const requestData: Record<string, unknown> = {
         message: messageToSend,
         session_id: sessionId, // Use the generated session ID
         conversation_history: messages.slice(-10), // Send last 10 messages for context
@@ -196,18 +196,52 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSendMessage, isL
       const decoder = new TextDecoder();
       let accumulatedContent = '';
 
+      let streamComplete = false;
+      // Buffer to handle partial lines across chunks
+      let leftover = '';
       while (true) {
         const { done, value } = await reader.read();
-        
-        if (done) break;
+        if (streamComplete) break;
+        if (done) {
+          // Process any remaining buffered content
+          if (leftover) {
+            const lastLine = leftover;
+            leftover = '';
+            if (lastLine.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(lastLine.slice(6));
+                if (data.type === 'chunk' || typeof data === 'string') {
+                  const content = typeof data === 'string' ? data : data.content || '';
+                  accumulatedContent += content;
+                  const cleanedContent = cleanBoxedContent(accumulatedContent);
+                  setMessages(prev => prev.map(msg => msg.id === aiMessageId ? { ...msg, content: cleanedContent } : msg));
+                }
+              } catch {
+                // ignore invalid trailing JSON fragment
+              }
+            }
+          }
+          break;
+        }
 
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n');
+        const chunk = decoder.decode(value, { stream: true });
+        const combined = leftover + chunk;
+        const lines = combined.split('\n');
+        // Keep the last line in buffer if it may be partial
+        leftover = lines.pop() || '';
 
-        for (const line of lines) {
+        for (const rawLine of lines) {
+          const line = rawLine.trimEnd();
+          if (!line) continue;
           if (line.startsWith('data: ')) {
+            const payload = line.slice(6).trim();
+            // Handle the [DONE] signal
+            if (payload === '[DONE]') {
+              streamComplete = true;
+              break;
+            }
             try {
-              const data = JSON.parse(line.slice(6));
+              const data = JSON.parse(payload);
               
               // Handle structured format (Mistral reasoning model)
               if (typeof data === 'string') {
@@ -258,6 +292,15 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSendMessage, isL
                   setThinkingContent(prev => prev + data.content);
                 } else if (data.type === 'thinking_complete') {
                   setThinkingExpanded(false);
+                } else if (data.type === 'chunk') {
+                  // Handle streaming chunks
+                  accumulatedContent += data.content;
+                  const cleanedContent = cleanBoxedContent(accumulatedContent);
+                  setMessages(prev => prev.map(msg => 
+                    msg.id === aiMessageId 
+                      ? { ...msg, content: cleanedContent }
+                      : msg
+                  ));
                 } else if (data.type === 'answer') {
                   accumulatedContent += data.content;
                   const cleanedContent = cleanBoxedContent(accumulatedContent);
@@ -288,11 +331,33 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSendMessage, isL
                 throw new Error(data.error);
               }
             } catch (e) {
-              // Skip invalid JSON lines
+              // Skip invalid JSON lines (likely partial), accumulate to content if plain text
+              try {
+                // Some providers may send raw text chunks
+                accumulatedContent += payload;
+                const cleanedContent = cleanBoxedContent(accumulatedContent);
+                setMessages(prev => prev.map(msg => 
+                  msg.id === aiMessageId 
+                    ? { ...msg, content: cleanedContent }
+                    : msg
+                ));
+              } catch {
+                // ignore parse fallback errors
+              }
               continue;
             }
           }
         }
+      }
+
+      // Ensure final content is set when streaming completes
+      if (accumulatedContent && aiMessageId) {
+        const cleanedContent = cleanBoxedContent(accumulatedContent);
+        setMessages(prev => prev.map(msg => 
+          msg.id === aiMessageId 
+            ? { ...msg, content: cleanedContent }
+            : msg
+        ));
       }
 
     } catch (error) {

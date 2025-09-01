@@ -133,7 +133,7 @@ class QueryAnalyzer:
             recent_messages = conversation_history[-3:]  # Last 3 exchanges
             context_summary = "\n".join(
                 [
-                    f"{'User' if msg.get('role') == 'user' else 'Assistant'}: {msg.get('content', '')[:200]}"
+                    f"{'User' if (hasattr(msg, 'role') and (msg.role.value if hasattr(msg.role, 'value') else str(msg.role)) == 'user') or (isinstance(msg, dict) and msg.get('role') == 'user') else 'Assistant'}: {(msg.content if hasattr(msg, 'content') else msg.get('content', ''))[:200]}"
                     for msg in recent_messages
                 ]
             )
@@ -164,11 +164,16 @@ Document weights must sum to 1.0. Higher candidate weight for personal questions
         # Determine the best small model for the current provider
         small_model = None
         if hasattr(self.llm_provider, "provider_type"):
-            if self.llm_provider.provider_type.value == "openai":
-                small_model = "gpt-5-mini"  # OpenAI's reasoning model
-            elif self.llm_provider.provider_type.value == "mistral":
-                small_model = "mistral-small-latest"  # Mistral's latest lightweight model for classification
-            # For other providers, let them use their default model
+            provider_type_str = self.llm_provider.provider_type.value if hasattr(self.llm_provider.provider_type, 'value') else str(self.llm_provider.provider_type)
+            if provider_type_str == "openai":
+                small_model = "gpt-5-nano"  # OpenAI's fast, cheap reasoning model
+            elif provider_type_str == "mistral":
+                small_model = "mistral-small-latest"  # Mistral's lightweight model for classification
+            elif provider_type_str == "ollama":
+                # For Ollama, we could use a smaller local model like llama3.2:1b for analysis
+                # But this requires the model to be available locally
+                small_model = None  # Use default model for now
+            # For other providers (Novita, etc.), use their default model
 
         # For now, let's use the default model to avoid potential issues
         # small_model = None  # Use default model
@@ -183,7 +188,8 @@ Document weights must sum to 1.0. Higher candidate weight for personal questions
             model=small_model,  # Use provider-appropriate small/fast model
         )
         
-        logger.debug(f"Query analyzer using model: {small_model} for provider: {self.llm_provider.provider_type.value}")
+        provider_type_str = self.llm_provider.provider_type.value if hasattr(self.llm_provider.provider_type, 'value') else str(self.llm_provider.provider_type)
+        logger.debug(f"Query analyzer using model: {small_model} for provider: {provider_type_str}")
         logger.debug(f"Query analyzer prompt length: {len(analysis_prompt)}")
 
         response = self.llm_provider.generate_content(request)

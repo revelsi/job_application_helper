@@ -11,7 +11,7 @@
 
 import { config, getSecureHeaders, sanitizeError } from './config';
 
-interface ApiResponse<T = any> {
+interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;
@@ -106,7 +106,7 @@ class ApiClient {
     return this.makeRequest<T>(endpoint, { ...options, method: 'GET' });
   }
 
-  async post<T>(endpoint: string, data?: any, options: RequestOptions = {}): Promise<ApiResponse<T>> {
+  async post<T>(endpoint: string, data?: Record<string, unknown>, options: RequestOptions = {}): Promise<ApiResponse<T>> {
     return this.makeRequest<T>(endpoint, {
       ...options,
       method: 'POST',
@@ -114,7 +114,7 @@ class ApiClient {
     });
   }
 
-  async put<T>(endpoint: string, data?: any, options: RequestOptions = {}): Promise<ApiResponse<T>> {
+  async put<T>(endpoint: string, data?: Record<string, unknown>, options: RequestOptions = {}): Promise<ApiResponse<T>> {
     return this.makeRequest<T>(endpoint, {
       ...options,
       method: 'PUT',
@@ -202,7 +202,7 @@ class ApiClient {
     }
   }
 
-  async stream(endpoint: string, data?: any, options: RequestOptions = {}): Promise<ReadableStreamDefaultReader<Uint8Array> | null> {
+  async stream(endpoint: string, data?: Record<string, unknown>, options: RequestOptions = {}): Promise<ReadableStreamDefaultReader<Uint8Array> | null> {
     const controller = new AbortController();
     // Create timeout handler function to avoid unsafe-eval detection
     const abortHandler = () => controller.abort();
@@ -214,6 +214,8 @@ class ApiClient {
         method: 'POST',
         headers: {
           ...getSecureHeaders(),
+          // Explicitly request Server-Sent Events to avoid proxies/buffers altering the stream
+          'Accept': 'text/event-stream',
           ...options.headers,
         },
         body: data ? JSON.stringify(data) : undefined,

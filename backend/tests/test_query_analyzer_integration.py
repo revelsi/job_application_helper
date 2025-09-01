@@ -73,7 +73,7 @@ class TestQueryAnalyzerIntegration(unittest.TestCase):
         """Test that query analysis is called during message processing."""
         # Mock document service
         mock_doc_service.return_value = Mock()
-        mock_doc_service.return_value.get_relevant_context.return_value = {
+        mock_doc_service.return_value.get_document_context.return_value = {
             "has_context": False,
             "context_text": "",
             "source_documents": [],
@@ -133,7 +133,7 @@ class TestQueryAnalyzerIntegration(unittest.TestCase):
         """Test dynamic document weighting based on query analysis."""
         # Mock document service
         with patch.object(self.chat_controller, "documents_available", True):
-            with patch.object(self.chat_controller.document_service, "get_relevant_context") as mock_get_context:
+            with patch.object(self.chat_controller.document_service, "get_document_context") as mock_get_context:
                 mock_get_context.return_value = {
                     "has_context": True,
                     "context_text": "Test context",
@@ -153,7 +153,7 @@ class TestQueryAnalyzerIntegration(unittest.TestCase):
                     query_analysis=analysis_with_weights
                 )
                 
-                # Verify get_relevant_context was called with dynamic limits
+                # Verify get_document_context was called with dynamic limits
                 mock_get_context.assert_called_once()
                 call_kwargs = mock_get_context.call_args.kwargs
                 

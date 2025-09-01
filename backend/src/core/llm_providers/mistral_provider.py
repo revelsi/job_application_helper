@@ -128,31 +128,7 @@ class MistralProvider(LLMProvider):
             self.logger.info("Mistral client initialized")
         return self._client
 
-    def _build_messages(self, request: GenerationRequest) -> List[Dict[str, Any]]:
-        """Build messages in Mistral format."""
-        messages = []
 
-        # For Mistral models, we build context in the user message
-
-        # Build user message with context if provided
-        user_content = ""
-
-        # Add context if provided
-        if request.context:
-            context_parts = []
-            for key, value in request.context.items():
-                if value and isinstance(value, str) and len(value.strip()) > 0:
-                    context_parts.append(f"{key.replace('_', ' ').title()}: {value}")
-
-            if context_parts:
-                user_content += "Context:\n" + "\n".join(context_parts) + "\n\n"
-
-        # Add main prompt
-        user_content += request.prompt
-
-        messages.append({"role": "user", "content": user_content})
-
-        return messages
 
 
 

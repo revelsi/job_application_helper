@@ -162,17 +162,22 @@ class SimpleChatController:
             # Initialize query analysis with the specific provider
             self._ensure_query_analyzer(llm_provider)
             
-            # Analyze the query to understand intent and document relevance
+            # Analyze query for intent and document weighting
+            # Note: This is valuable for document weighting and intent detection
             query_analysis = self.query_analyzer.analyze_query(
-                message, conversation_history
+                sanitized_message, conversation_history
             )
+            if query_analysis:
+                self.logger.debug(
+                    f"Query analysis: intent={query_analysis.intent_type}, confidence={query_analysis.confidence}"
+                )
 
             # Detect content type (enhanced with query analysis)
             content_type = self._detect_content_type(sanitized_message, query_analysis)
 
             # Get document context (enhanced with document weighting)
             self.logger.info("📄 Retrieving document context...")
-            context = self._get_document_context_if_needed(sanitized_message, query_analysis)
+            context = self._get_document_context(sanitized_message, query_analysis)
             self.logger.info(f"✅ Document context retrieved: {len(context.get('context_text', ''))} characters")
 
             # Get conversation history from memory manager if available
@@ -187,24 +192,23 @@ class SimpleChatController:
                 )
 
             # Build prompt with context and conversation history
-            self.logger.info("🔨 Building prompt with context...")
-            prompt = self._build_prompt(
+            self.logger.info("🔨 Building messages with context...")
+            prompt_data = self._build_prompt(
                 sanitized_message, context, content_type, conversation_context
             )
-            self.logger.info(f"✅ Prompt built: {len(prompt)} characters")
+            messages = prompt_data["messages"]
+            legacy_prompt = prompt_data["legacy_prompt"]
+            self.logger.info(f"✅ Messages built: {len(messages)} messages, {len(legacy_prompt)} characters")
 
-            # Generate response
+            # Generate response with proper token management
+            safe_max_tokens = self._get_safe_max_tokens(model, legacy_prompt)
             generation_request = GenerationRequest(
-                prompt=prompt,
+                messages=messages,  # Use modern message structure
                 content_type=content_type,
                 context=context,
                 model=model,
                 reasoning_effort=reasoning_effort,
-                max_tokens=getattr(
-                    self.settings, "chat_max_tokens", 16000
-                ),  # Updated default for reasoning models
-                # Remove temperature parameter for GPT-5-mini compatibility
-                # temperature=0.7,
+                max_tokens=safe_max_tokens,
             )
 
             llm_response = llm_provider.generate_content(generation_request)
@@ -324,27 +328,22 @@ class SimpleChatController:
             # Initialize query analysis with the specific provider
             self._ensure_query_analyzer(llm_provider)
             
-            # Analyze query for intent and document weighting (if available)
-            query_analysis = None
-            if self.query_analyzer_available:
-                try:
-                    query_analysis = self.query_analyzer.analyze_query(
-                        sanitized_message, conversation_history=conversation_history
-                    )
-                    if query_analysis:
-                        self.logger.debug(
-                            f"Query analysis: intent={query_analysis.intent_type}, confidence={query_analysis.confidence}"
-                        )
-                except Exception as e:
-                    self.logger.warning(f"Query analysis failed, continuing without it: {e}")
-                    query_analysis = None
+            # Analyze query for intent and document weighting
+            # Note: This is valuable for document weighting and intent detection
+            query_analysis = self.query_analyzer.analyze_query(
+                sanitized_message, conversation_history
+            )
+            if query_analysis:
+                self.logger.debug(
+                    f"Query analysis: intent={query_analysis.intent_type}, confidence={query_analysis.confidence}"
+                )
 
             # Detect content type (enhanced with query analysis)
             content_type = self._detect_content_type(sanitized_message, query_analysis)
 
             # Get document context (enhanced with document weighting)
             self.logger.info("📄 Retrieving document context...")
-            context = self._get_document_context_if_needed(sanitized_message, query_analysis)
+            context = self._get_document_context(sanitized_message, query_analysis)
             self.logger.info(f"✅ Document context retrieved: {len(context.get('context_text', ''))} characters")
 
             # Get conversation history from memory manager if available
@@ -359,24 +358,23 @@ class SimpleChatController:
                 )
 
             # Build prompt with context and conversation history
-            self.logger.info("🔨 Building prompt with context...")
-            prompt = self._build_prompt(
+            self.logger.info("🔨 Building messages with context...")
+            prompt_data = self._build_prompt(
                 sanitized_message, context, content_type, conversation_context
             )
-            self.logger.info(f"✅ Prompt built: {len(prompt)} characters")
+            messages = prompt_data["messages"]
+            legacy_prompt = prompt_data["legacy_prompt"]
+            self.logger.info(f"✅ Messages built: {len(messages)} messages, {len(legacy_prompt)} characters")
 
-            # Generate streaming response
+            # Generate streaming response with proper token management
+            safe_max_tokens = self._get_safe_max_tokens(model, legacy_prompt)
             generation_request = GenerationRequest(
-                prompt=prompt,
+                messages=messages,  # Use modern message structure
                 content_type=content_type,
                 context=context,
-                model=model,  # Pass the specific model if provided
+                model=model,
                 reasoning_effort=reasoning_effort,
-                max_tokens=getattr(
-                    self.settings, "chat_max_tokens", 16000
-                ),  # Updated default for reasoning models
-                # Remove temperature parameter for GPT-5-mini compatibility
-                # temperature=0.7,
+                max_tokens=safe_max_tokens,
             )
 
             # Accumulate content for memory
@@ -477,31 +475,18 @@ class SimpleChatController:
             return ContentType.CONTENT_REFINEMENT
         return ContentType.GENERAL_RESPONSE
 
-    def _get_document_context_if_needed(
-        self, message: str, query_analysis=None
-    ) -> Dict[str, Any]:
-        """
-        Get relevant document context - always try to use documents if available.
-        
-        Args:
-            message: User message
-            query_analysis: Optional QueryAnalysis with document weights
-            
-        Returns:
-            Dictionary with document context
-        """
-        # Always try to get document context - let the user decide what's relevant
-        return self._get_document_context(message, query_analysis)
-
     def _get_document_context(
         self, message: str, query_analysis=None
     ) -> Dict[str, Any]:
         """
-        Get relevant document context for the message, enhanced with document weighting.
-
+        Get document context - simple document dumping approach.
+        
+        Just gets the most recent documents from each category.
+        The message parameter is kept for interface compatibility but currently ignored.
+        
         Args:
-            message: User message
-            query_analysis: Optional QueryAnalysis with document weights
+            message: User message (currently unused, kept for interface compatibility)
+            query_analysis: Optional QueryAnalysis with document weights (currently unused)
 
         Returns:
             Dictionary with document context
@@ -537,9 +522,8 @@ class SimpleChatController:
                 self.settings, "max_company_doc_length", 20000
             )
 
-        # Get context from document service with calculated limits
-        context = self.document_service.get_relevant_context(
-            query=message,
+        # Get context from document service - simple document dumping
+        context = self.document_service.get_document_context(
             max_context_length=getattr(self.settings, "max_context_length", 100000),
             max_candidate_doc_length=max_candidate_doc_length,
             max_job_doc_length=max_job_doc_length,
@@ -556,10 +540,7 @@ class SimpleChatController:
         conversation_context: Optional[List[Dict[str, Any]]] = None,
     ) -> str:
         """
-        Build the prompt for LLM generation.
-
-        For Mistral reasoning models, we let Mistral handle the system prompt
-        and just provide the user request with context.
+        Build the prompt for LLM generation using PromptManager.
 
         Args:
             message: User message
@@ -570,64 +551,175 @@ class SimpleChatController:
         Returns:
             Formatted prompt string
         """
-        # For Mistral reasoning models, we let Mistral handle the system prompt
-        # and just provide a clear user request with context
-
-        prompt_parts = []
-
-        # Add document context if available
-        if context.get("has_context", False):
-            context_text = context.get("context_text", "")
-            prompt_parts.append(f"DOCUMENT CONTEXT:\n{context_text}")
-
-        # Add conversation history if available
-        if (
-            conversation_context and len(conversation_context) > 1
-        ):  # More than just the current message
-            # Filter out system messages and format conversation history
-            conversation_messages = []
-            for msg in conversation_context:
-                if msg.get("role") != "system":
-                    role = "User" if msg.get("role") == "user" else "Assistant"
-                    content = msg.get("content", "")
-                    conversation_messages.append(f"{role}: {content}")
-
-            if conversation_messages:
-                # Include recent conversation history (last 6 messages to avoid token limits)
-                recent_history = conversation_messages[-6:]
-                history_text = "\n".join(recent_history)
-                prompt_parts.append(f"CONVERSATION HISTORY:\n{history_text}")
-
-        # Add current user request
-        prompt_parts.append(f"USER REQUEST: {message}")
-
-        # Add guidance
-        if context.get("has_context", False):
-            prompt_parts.append(
-                "Please provide a helpful response based on the document context above. If the context doesn't contain relevant information, please say so and provide general guidance."
-            )
+        # Map ContentType to PromptType
+        prompt_type = self._map_content_type_to_prompt_type(content_type)
+        
+        # Extract context information for prompt enhancement
+        context_info = self._extract_context_info(context)
+        
+        # Build conversation history for PromptManager
+        conversation_history = self._format_conversation_history(conversation_context)
+        
+        # Use PromptManager to build modern message structure
+        messages = self.prompt_manager.build_messages(
+            prompt_type=prompt_type,
+            user_query=message,
+            context=context.get("context_text", ""),
+            conversation_history=conversation_history,
+            **context_info
+        )
+        
+        # For backward compatibility, also provide the legacy prompt format
+        # by combining all messages into a single string
+        legacy_prompt = self._messages_to_legacy_prompt(messages)
+        
+        return {
+            "messages": messages,
+            "legacy_prompt": legacy_prompt
+        }
+    
+    def _map_content_type_to_prompt_type(self, content_type: ContentType):
+        """Map ContentType to PromptType for PromptManager."""
+        from src.core.prompts import PromptType
+        
+        mapping = {
+            ContentType.COVER_LETTER: PromptType.COVER_LETTER,
+            ContentType.INTERVIEW_ANSWER: PromptType.INTERVIEW_ANSWER,
+            ContentType.CONTENT_REFINEMENT: PromptType.GENERAL_RESPONSE,
+            ContentType.GENERAL_RESPONSE: PromptType.GENERAL_RESPONSE,
+        }
+        
+        return mapping.get(content_type, PromptType.GENERAL_RESPONSE)
+    
+    def _extract_context_info(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract contextual information for prompt enhancement."""
+        context_info = {}
+        
+        # Try to detect industry from document context
+        context_text = context.get("context_text", "").lower()
+        if any(keyword in context_text for keyword in ["software", "developer", "engineer", "tech", "programming"]):
+            context_info["industry"] = "tech"
+        elif any(keyword in context_text for keyword in ["finance", "banking", "investment", "financial"]):
+            context_info["industry"] = "finance"
+        elif any(keyword in context_text for keyword in ["healthcare", "medical", "hospital", "patient"]):
+            context_info["industry"] = "healthcare"
+        
+        # Try to detect experience level
+        if any(keyword in context_text for keyword in ["senior", "lead", "principal", "architect", "manager"]):
+            context_info["experience_level"] = "senior"
+        elif any(keyword in context_text for keyword in ["junior", "entry", "graduate", "intern"]):
+            context_info["experience_level"] = "entry"
         else:
-            prompt_parts.append(
-                "Note: You don't have access to any specific documents about this user's background, experience, or job details. Please provide general guidance and suggest that the user upload relevant documents (CV, job descriptions, etc.) for more personalized assistance."
-            )
+            context_info["experience_level"] = "mid"
+        
+        return context_info
+    
+    def _format_conversation_history(self, conversation_context: Optional[List[Dict[str, Any]]]) -> Optional[List]:
+        """Format conversation history for PromptManager."""
+        if not conversation_context or len(conversation_context) <= 1:
+            return None
+        
+        # Filter out system messages and format for PromptManager
+        formatted_history = []
+        for msg in conversation_context:
+            if msg.get("role") != "system":
+                formatted_history.append({
+                    "role": msg.get("role"),
+                    "content": msg.get("content", "")
+                })
+        
+        # Return recent history (more intelligent limit based on content length)
+        return self._get_conversation_history_within_token_budget(formatted_history)
+    
+    def _get_conversation_history_within_token_budget(
+        self, 
+        messages: List[Dict[str, str]], 
+        max_tokens: int = 8000
+    ) -> List[Dict[str, str]]:
+        """
+        Get conversation history that fits within token budget.
+        Uses rough estimation: 1 token ≈ 4 characters.
+        """
+        if not messages:
+            return []
+        
+        selected_messages = []
+        current_tokens = 0
+        
+        # Start from most recent messages
+        for msg in reversed(messages):
+            content = msg.get("content", "")
+            estimated_tokens = len(content) // 4  # Rough estimation
+            
+            if current_tokens + estimated_tokens > max_tokens:
+                break
+            
+            selected_messages.insert(0, msg)  # Insert at beginning to maintain order
+            current_tokens += estimated_tokens
+        
+        return selected_messages
 
+    def _messages_to_legacy_prompt(self, messages: List[Dict[str, str]]) -> str:
+        """
+        Convert message structure back to legacy prompt format for backward compatibility.
+        
+        Args:
+            messages: List of message dictionaries
+            
+        Returns:
+            Single prompt string combining all messages
+        """
+        prompt_parts = []
+        
+        for msg in messages:
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+            
+            if role == "system":
+                prompt_parts.append(content)
+            elif role == "user":
+                prompt_parts.append(content)
+            elif role == "assistant":
+                prompt_parts.append(f"Assistant: {content}")
+        
         return "\n\n".join(prompt_parts)
 
-    def _get_cover_letter_prompt(self) -> str:
-        """Get prompt for cover letter generation."""
-        return """You are a professional career advisor specializing in cover letter writing. Your task is to help create compelling, personalized cover letters that effectively connect a candidate's experience with job requirements."""
-
-    def _get_interview_answer_prompt(self) -> str:
-        """Get prompt for interview answer generation."""
-        return """You are a professional interview coach. Your task is to help candidates prepare strong, structured answers to interview questions using the STAR method (Situation, Task, Action, Result) when appropriate."""
-
-    def _get_content_refinement_prompt(self) -> str:
-        """Get prompt for content refinement."""
-        return """You are a professional writing coach specializing in career-related content. Your task is to help improve, refine, and enhance written content to make it more impactful and professional."""
-
-    def _get_general_response_prompt(self) -> str:
-        """Get prompt for general responses."""
-        return """You are a professional career advisor. Your task is to provide helpful, practical advice and information related to job applications, career development, and professional growth."""
+    def _get_safe_max_tokens(self, model: Optional[str], prompt: str) -> int:
+        """
+        Get safe max_tokens for the given model and prompt.
+        Uses model-specific limits instead of generic settings.
+        
+        Args:
+            model: Model name (if None, uses provider default)
+            prompt: The prompt to estimate token usage for
+            
+        Returns:
+            Safe max_tokens value that respects model limits
+        """
+        from src.core.llm_providers.model_config import get_safe_token_limits
+        
+        # Estimate input tokens (rough estimation: 1 token ≈ 4 characters)
+        estimated_input_tokens = len(prompt) // 4
+        
+        # Get model-specific safe limits
+        if model:
+            token_limits = get_safe_token_limits(model, estimated_input_tokens)
+            model_max_output = token_limits["recommended_output"]
+        else:
+            # Fallback for unknown models
+            model_max_output = 2048
+        
+        # Use the smaller of: model limit, settings limit, or calculated safe limit
+        settings_max = getattr(self.settings, "chat_max_tokens", 16000)
+        safe_max_tokens = min(model_max_output, settings_max)
+        
+        self.logger.debug(
+            f"Token calculation - Model: {model}, Input tokens: ~{estimated_input_tokens}, "
+            f"Model limit: {model_max_output}, Settings: {settings_max}, "
+            f"Using: {safe_max_tokens}"
+        )
+        
+        return safe_max_tokens
 
     def _enhance_response_with_sources(
         self, response: str, context: Dict[str, Any]
