@@ -438,7 +438,7 @@ const Index = () => {
             </TabsContent>
 
             <TabsContent value="chat" className="mt-0">
-              <div className="glass rounded-2xl p-6 border-glass-border">
+              <div className="glass rounded-2xl border-glass-border">
                 {!hasRequiredApiKeys ? (
                   <div className="text-center space-y-6">
                     <div className="w-16 h-16 bg-yellow-500/20 rounded-full flex items-center justify-center mx-auto">

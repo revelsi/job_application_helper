@@ -69,9 +69,20 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSendMessage, isL
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const thinkingContentRef = useRef<HTMLDivElement>(null);
+  const autoScrollRef = useRef<boolean>(true);
+  const scrollRafRef = useRef<number | null>(null);
 
   // Get API keys status to show available providers
   const { apiKeyStatus } = useApiKeys();
+
+  // Cleanup any pending animation frame on unmount
+  useEffect(() => {
+    return () => {
+      if (scrollRafRef.current) {
+        cancelAnimationFrame(scrollRafRef.current);
+      }
+    };
+  }, []);
 
   // Get available providers (only configured ones)
   const getAvailableProviders = () => {
@@ -121,16 +132,25 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSendMessage, isL
   };
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (!messagesContainerRef.current) return;
+    const container = messagesContainerRef.current;
+    // cancel any pending frame
+    if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current);
+    scrollRafRef.current = requestAnimationFrame(() => {
+      container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+    });
   };
 
   const handleScroll = () => {
-    setShowScrollButton(!isNearBottom());
+    const atBottom = isNearBottom();
+    setShowScrollButton(!atBottom);
+    // If user scrolls up, disable auto-scroll; re-enable when near bottom
+    autoScrollRef.current = atBottom;
   };
 
   useEffect(() => {
     // Only auto-scroll if user is already near the bottom or if it's a new message
-    if (isNearBottom() || messages.length === 0) {
+    if (autoScrollRef.current || messages.length === 0) {
       scrollToBottom();
     }
   }, [messages]);
@@ -463,17 +483,14 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSendMessage, isL
   };
 
   return (
-    <div className="flex flex-col h-[600px] glass border-glass-border rounded-2xl overflow-hidden">
+    <div className="flex flex-col h-[calc(100vh-220px)] min-h-[600px] min-h-0 glass border-glass-border rounded-2xl overflow-hidden">
       {/* Sleek Header */}
-      <div className="flex justify-between items-center p-6 bg-gradient-to-r from-blue-600/10 to-purple-600/10 border-b border-glass-border">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 gradient-primary rounded-xl flex items-center justify-center shadow-glow">
-            <MessageSquare className="h-5 w-5 text-white" />
+      <div className="flex justify-between items-center p-2 bg-gradient-to-r from-blue-600/10 to-purple-600/10 border-b border-glass-border">
+        <div className="flex items-center gap-2">
+          <div className="w-6 h-6 gradient-primary rounded-md flex items-center justify-center shadow-glow">
+            <MessageSquare className="h-3.5 w-3.5 text-white" />
           </div>
-          <div>
-            <h2 className="text-xl font-bold text-gradient">AI Assistant</h2>
-            <p className="text-sm text-muted-foreground">Your career companion</p>
-          </div>
+          <h2 className="text-base font-semibold text-gradient">AI Assistant</h2>
         </div>
         <div className="flex gap-2">
           <Button
@@ -481,10 +498,10 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSendMessage, isL
             variant="outline"
             size="sm"
             disabled={messages.length === 0}
-            className="glass border-glass-border hover:bg-white/20"
+            className="glass border-glass-border hover:bg-white/20 h-7 px-2 text-[11px]"
             title="Export chat"
           >
-            <Download className="h-4 w-4 mr-2" />
+            <Download className="h-3 w-3 mr-1" />
             Export
           </Button>
           <Button
@@ -492,21 +509,21 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSendMessage, isL
             variant="destructive"
             size="sm"
             disabled={messages.length === 0}
-            className={`transition-all duration-200 ${
+            className={`transition-all duration-200 h-7 px-2 text-[11px] ${
               messages.length === 0
                 ? 'opacity-50 cursor-not-allowed bg-gray-100 text-gray-400 border-gray-200 hover:bg-gray-100'
                 : 'bg-red-500 hover:bg-red-600 text-white border-red-500 hover:border-red-600 shadow-sm hover:shadow-md'
             }`}
             title={messages.length === 0 ? "No messages to clear" : "Clear chat conversation"}
           >
-            <Trash2 className="h-4 w-4 mr-2" />
+            <Trash2 className="h-3 w-3 mr-1" />
             Clear
           </Button>
         </div>
       </div>
 
       {/* Messages Container - Much larger */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-6" ref={messagesContainerRef} onScroll={handleScroll}>
+      <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 space-y-4" ref={messagesContainerRef} onScroll={handleScroll}>
         {!hasApiKeys ? (
           <div className="text-center text-muted-foreground mt-12">
             <div className="w-16 h-16 bg-muted/30 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -643,13 +660,13 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSendMessage, isL
       )}
 
       {/* Provider/Model Selection */}
-      {hasApiKeys && availableProviders.length > 0 && (
-        <div className="px-6 py-3 border-t border-glass-border bg-white/20 backdrop-blur-sm">
-          <div className="flex items-center gap-3">
-            <Settings className="h-4 w-4 text-muted-foreground" />
-            <div className="flex items-center gap-3 flex-1">
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">Provider:</span>
+       {hasApiKeys && availableProviders.length > 0 && (
+        <div className="px-3 py-2 border-t border-glass-border bg-white/20 backdrop-blur-sm">
+          <div className="flex items-center gap-2">
+            <Settings className="h-3.5 w-3.5 text-muted-foreground" />
+            <div className="flex items-center gap-2 flex-1">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-muted-foreground">Provider:</span>
                 <Select 
                   value={selectedProvider} 
                   onValueChange={(value) => {
@@ -660,7 +677,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSendMessage, isL
                     }
                   }}
                 >
-                  <SelectTrigger className="w-32 h-8 text-xs">
+                  <SelectTrigger className="w-28 h-7 text-[11px]">
                     <SelectValue placeholder="Provider" />
                   </SelectTrigger>
                   <SelectContent>
@@ -673,13 +690,13 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSendMessage, isL
                 </Select>
               </div>
               
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">Model:</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-muted-foreground">Model:</span>
                 <Select 
                   value={selectedModel} 
                   onValueChange={setSelectedModel}
                 >
-                  <SelectTrigger className="w-48 h-8 text-xs">
+                  <SelectTrigger className="w-44 h-7 text-[11px]">
                     <SelectValue placeholder="Model" />
                   </SelectTrigger>
                   <SelectContent>
@@ -694,8 +711,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSendMessage, isL
               
               {/* Reasoning Controls - different UI for different model types */}
               {supportsReasoningEffort(selectedModel) && (
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Reasoning:</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground">Reasoning:</span>
 
 
 
@@ -705,7 +722,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSendMessage, isL
                       value={reasoningEffort}
                       onValueChange={setReasoningEffort}
                     >
-                      <SelectTrigger className="w-32 h-8 text-xs">
+                      <SelectTrigger className="w-28 h-7 text-[11px]">
                         <SelectValue placeholder="Effort" />
                       </SelectTrigger>
                       <SelectContent>
@@ -724,23 +741,23 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSendMessage, isL
       )}
 
       {/* Input Area */}
-      <div className="p-6 border-t border-glass-border bg-white/30 backdrop-blur-sm">
+      <div className="p-4 border-t border-glass-border bg-white/30 backdrop-blur-sm">
         <div className="flex gap-3">
           <Textarea
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
             onKeyPress={handleKeyPress}
             placeholder={hasApiKeys ? "Ask your AI assistant about job applications, interview tips, or document review..." : "Configure API keys to enable chat..."}
-            className="resize-none min-h-[60px] max-h-[120px] glass border-glass-border focus:ring-2 focus:ring-primary/20"
+            className="resize-none min-h-[50px] max-h-[100px] glass border-glass-border focus:ring-2 focus:ring-primary/20"
             rows={2}
             disabled={isLoading || !hasApiKeys || isStreaming}
           />
           <Button
             onClick={handleSendMessage}
             disabled={!inputMessage.trim() || isLoading || !hasApiKeys || isStreaming || !sessionId}
-            className="px-6 py-3 h-auto gradient-primary text-white shadow-glow hover:shadow-xl transition-all rounded-xl"
+            className="px-4 py-2 h-[50px] gradient-primary text-white shadow-glow hover:shadow-xl transition-all rounded-lg"
           >
-            <Send className="h-5 w-5" />
+            <Send className="h-4 w-4" />
           </Button>
         </div>
       </div>
