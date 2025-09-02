@@ -21,29 +21,61 @@ Factory functions to create and manage LLM providers based on user preference.
 Supports both environment variables (for developers) and secure local storage (for users).
 """
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
+import importlib
 
 from src.core.credentials import get_credentials_manager
 from src.core.llm_providers.base import LLMProvider, ProviderType
-from src.core.llm_providers.mistral_provider import MISTRAL_AVAILABLE, MistralProvider
 from src.core.llm_providers.model_config import get_provider_description
-from src.core.llm_providers.novita_provider import (
-    OPENAI_AVAILABLE as NOVITA_AVAILABLE,
-)
-from src.core.llm_providers.novita_provider import (
-    NovitaProvider,
-)
-from src.core.llm_providers.ollama_provider import (
-    HTTPX_AVAILABLE as OLLAMA_HTTPX_AVAILABLE,
-)
-from src.core.llm_providers.ollama_provider import (
-    OllamaProvider,
-)
-from src.core.llm_providers.openai_provider import OPENAI_AVAILABLE, OpenAIProvider
 from src.utils.config import get_settings
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
+def _try_import(module_path: str) -> Optional[object]:
+    """Safely import a module, returning None on failure."""
+    try:
+        return importlib.import_module(module_path)
+    except Exception:
+        return None
+
+
+def _get_openai_provider() -> Tuple[Optional[type], bool]:
+    mod = _try_import("src.core.llm_providers.openai_provider")
+    if not mod:
+        return None, False
+    provider_cls = getattr(mod, "OpenAIProvider", None)
+    available = bool(provider_cls)
+    return provider_cls, available
+
+
+def _get_mistral_provider() -> Tuple[Optional[type], bool]:
+    mod = _try_import("src.core.llm_providers.mistral_provider")
+    if not mod:
+        return None, False
+    provider_cls = getattr(mod, "MistralProvider", None)
+    available = bool(provider_cls)
+    return provider_cls, available
+
+
+def _get_ollama_provider() -> Tuple[Optional[type], bool]:
+    mod = _try_import("src.core.llm_providers.ollama_provider")
+    if not mod:
+        return None, False
+    provider_cls = getattr(mod, "OllamaProvider", None)
+    # Also ensure httpx is available via provider flag if present
+    httpx_flag = getattr(mod, "HTTPX_AVAILABLE", True)
+    available = bool(provider_cls) and bool(httpx_flag)
+    return provider_cls, available
+
+
+def _get_novita_provider() -> Tuple[Optional[type], bool]:
+    mod = _try_import("src.core.llm_providers.novita_provider")
+    if not mod:
+        return None, False
+    provider_cls = getattr(mod, "NovitaProvider", None)
+    available = bool(provider_cls)
+    return provider_cls, available
+
 
 
 class APIKeyManager:
@@ -221,10 +253,10 @@ def get_available_providers() -> Dict[ProviderType, bool]:
 
     # Check OpenAI availability
     try:
-        if OPENAI_AVAILABLE:
+        OpenAIProvider, openai_mod_available = _get_openai_provider()
+        if openai_mod_available and OpenAIProvider:
             openai_key = key_manager.get_api_key("openai")
-            openai_provider = OpenAIProvider(api_key=openai_key)
-            providers[ProviderType.OPENAI] = openai_provider.is_available()
+            providers[ProviderType.OPENAI] = OpenAIProvider(api_key=openai_key).is_available()
         else:
             providers[ProviderType.OPENAI] = False
     except Exception:
@@ -232,10 +264,10 @@ def get_available_providers() -> Dict[ProviderType, bool]:
 
     # Check Mistral availability
     try:
-        if MISTRAL_AVAILABLE:
+        MistralProvider, mistral_mod_available = _get_mistral_provider()
+        if mistral_mod_available and MistralProvider:
             mistral_key = key_manager.get_api_key("mistral")
-            mistral_provider = MistralProvider(api_key=mistral_key)
-            providers[ProviderType.MISTRAL] = mistral_provider.is_available()
+            providers[ProviderType.MISTRAL] = MistralProvider(api_key=mistral_key).is_available()
         else:
             providers[ProviderType.MISTRAL] = False
     except Exception:
@@ -243,9 +275,9 @@ def get_available_providers() -> Dict[ProviderType, bool]:
 
     # Check Ollama availability
     try:
-        if OLLAMA_HTTPX_AVAILABLE:
-            ollama_provider = OllamaProvider()
-            providers[ProviderType.OLLAMA] = ollama_provider.is_available()
+        OllamaProvider, ollama_mod_available = _get_ollama_provider()
+        if ollama_mod_available and OllamaProvider:
+            providers[ProviderType.OLLAMA] = OllamaProvider().is_available()
         else:
             providers[ProviderType.OLLAMA] = False
     except Exception:
@@ -253,10 +285,10 @@ def get_available_providers() -> Dict[ProviderType, bool]:
 
     # Check Novita availability
     try:
-        if NOVITA_AVAILABLE:
+        NovitaProvider, novita_mod_available = _get_novita_provider()
+        if novita_mod_available and NovitaProvider:
             novita_key = key_manager.get_api_key("novita")
-            novita_provider = NovitaProvider(api_key=novita_key)
-            providers[ProviderType.NOVITA] = novita_provider.is_available()
+            providers[ProviderType.NOVITA] = NovitaProvider(api_key=novita_key).is_available()
         else:
             providers[ProviderType.NOVITA] = False
     except Exception:
@@ -285,7 +317,8 @@ def get_llm_provider(
     key_manager = get_api_key_manager()
 
     if provider_type == ProviderType.OPENAI:
-        if not OPENAI_AVAILABLE:
+        OpenAIProvider, openai_mod_available = _get_openai_provider()
+        if not (openai_mod_available and OpenAIProvider):
             raise ImportError(
                 "OpenAI provider requires the openai package. Install with: pip install openai"
             )
@@ -300,7 +333,8 @@ def get_llm_provider(
         return provider
 
     if provider_type == ProviderType.MISTRAL:
-        if not MISTRAL_AVAILABLE:
+        MistralProvider, mistral_mod_available = _get_mistral_provider()
+        if not (mistral_mod_available and MistralProvider):
             raise ImportError(
                 "Mistral provider requires the mistralai package. Install with: pip install mistralai"
             )
@@ -315,7 +349,8 @@ def get_llm_provider(
         return provider
 
     if provider_type == ProviderType.OLLAMA:
-        if not OLLAMA_HTTPX_AVAILABLE:
+        OllamaProvider, ollama_mod_available = _get_ollama_provider()
+        if not (ollama_mod_available and OllamaProvider):
             raise ImportError(
                 "Ollama provider requires the httpx package. Install with: pip install httpx"
             )
@@ -330,7 +365,8 @@ def get_llm_provider(
         return provider
 
     if provider_type == ProviderType.NOVITA:
-        if not NOVITA_AVAILABLE:
+        NovitaProvider, novita_mod_available = _get_novita_provider()
+        if not (novita_mod_available and NovitaProvider):
             raise ImportError(
                 "Novita provider requires the openai package. Install with: pip install openai"
             )
@@ -368,7 +404,8 @@ def list_provider_info() -> List[Dict[str, any]]:
 
     # OpenAI info (prioritized first)
     try:
-        if OPENAI_AVAILABLE:
+        OpenAIProvider, openai_mod_available = _get_openai_provider()
+        if openai_mod_available and OpenAIProvider:
             openai_key = key_manager.get_api_key("openai")
             openai = OpenAIProvider(api_key=openai_key)
             info.append(
@@ -408,7 +445,8 @@ def list_provider_info() -> List[Dict[str, any]]:
 
     # Mistral info (second priority)
     try:
-        if MISTRAL_AVAILABLE:
+        MistralProvider, mistral_mod_available = _get_mistral_provider()
+        if mistral_mod_available and MistralProvider:
             mistral_key = key_manager.get_api_key("mistral")
             mistral = MistralProvider(api_key=mistral_key)
             info.append(
@@ -450,7 +488,8 @@ def list_provider_info() -> List[Dict[str, any]]:
 
     # Ollama info (third priority)
     try:
-        if OLLAMA_HTTPX_AVAILABLE:
+        OllamaProvider, ollama_mod_available = _get_ollama_provider()
+        if ollama_mod_available and OllamaProvider:
             ollama = OllamaProvider()
             info.append(
                 {
@@ -487,7 +526,8 @@ def list_provider_info() -> List[Dict[str, any]]:
 
     # Novita info (fourth priority)
     try:
-        if NOVITA_AVAILABLE:
+        NovitaProvider, novita_mod_available = _get_novita_provider()
+        if novita_mod_available and NovitaProvider:
             novita_key = key_manager.get_api_key("novita")
             novita = NovitaProvider(api_key=novita_key)
             info.append(

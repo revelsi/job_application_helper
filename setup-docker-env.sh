@@ -14,6 +14,15 @@ if [ ! -d "data" ]; then
     echo "   ✅ Data directory created"
 fi
 
+# Create Docker secrets directory for production deployments (optional)
+if [ ! -d "backend/.secrets" ]; then
+    echo "🔐 Creating Docker secrets directory..."
+    mkdir -p backend/.secrets
+    chmod 700 backend/.secrets
+    echo "   ✅ Docker secrets directory created"
+    echo "   💡 To use custom encryption keys in Docker, add them to backend/.secrets/encryption_key"
+fi
+
 # Check if .env file exists
 if [ ! -f ".env" ]; then
     echo "📝 Creating .env file from template..."

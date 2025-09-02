@@ -25,7 +25,7 @@ This module handles all configuration settings including:
 """
 
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Union
 
 from cryptography.fernet import Fernet
 from pydantic import ConfigDict, Field, validator
@@ -70,7 +70,13 @@ class Settings(BaseSettings):
     # Security
     enable_encryption: bool = Field(default=True, env="ENABLE_ENCRYPTION")
     encryption_key: Optional[str] = Field(default=None, env="ENCRYPTION_KEY")
+    encryption_key_file: Optional[Path] = Field(default=None, env="ENCRYPTION_KEY_FILE")
     max_upload_size_mb: int = Field(default=10, env="MAX_UPLOAD_SIZE_MB")
+    # CORS / Headers
+    cors_allowed_origins: List[str] = Field(
+        default_factory=lambda: ["http://localhost:8080"], env="CORS_ALLOWED_ORIGINS"
+    )
+    enable_api_csp_headers: bool = Field(default=False, env="ENABLE_API_CSP_HEADERS")
 
     # Document Processing Configuration
     max_context_length: int = Field(
@@ -120,6 +126,15 @@ class Settings(BaseSettings):
             raise ValueError(f"Log level must be one of: {valid_levels}")
         return v.upper()
 
+    @validator("cors_allowed_origins", pre=True)
+    @classmethod
+    def parse_cors_origins(cls, v: Union[str, List[str]]):
+        """Allow comma-separated string or JSON/list for CORS origins."""
+        if isinstance(v, str):
+            # support comma-separated and strip spaces
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
+
     model_config = ConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -160,6 +175,22 @@ def ensure_encryption_setup(settings: Settings) -> Optional[str]:
         and settings.encryption_key != "your_encryption_key_here"
     ):
         return settings.encryption_key
+
+    # Priority 1b: Check Docker secret file or explicit key file
+    # Common Docker secrets path is /run/secrets/<name>
+    try:
+        secret_path = settings.encryption_key_file or Path("/run/secrets/encryption_key")
+        if secret_path and secret_path.exists():
+            try:
+                key = secret_path.read_text().strip()
+                if key:
+                    print("🔐 Using encryption key from Docker secret file")
+                    return key
+            except Exception as e:
+                print(f"⚠️  Warning: Failed to read encryption key from secret file: {e}")
+    except Exception:
+        # Ignore if path inaccessible
+        pass
 
     # Priority 2: Check for existing key file (for Docker compatibility)
     # Wrap in try-except to handle permission errors in Docker containers

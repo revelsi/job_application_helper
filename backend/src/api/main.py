@@ -22,9 +22,13 @@ import time
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from typing import Dict
+import uuid
+import threading
 
 from src.api.endpoints import chat, documents, health, keys, models, ollama
 from src.utils.logging import get_logger
+from src.utils.config import get_settings
 
 logger = get_logger(__name__)
 
@@ -34,19 +38,20 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# CORS middleware for frontend integration
+# Configuration
+settings = get_settings()
+
+# CORS middleware (env-driven)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:8080",
-    ],  # Frontend URL
+    allow_origins=settings.cors_allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With", "X-Request-ID"],
 )
 
 
-# Security headers middleware
+# Security headers middleware (CSP disabled by default when served behind Nginx)
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
     response = await call_next(request)
@@ -56,21 +61,49 @@ async def add_security_headers(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    response.headers["Content-Security-Policy"] = (
-        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; font-src 'self'"
-    )
+    if settings.enable_api_csp_headers:
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https:; connect-src 'self'; font-src 'self'"
+        )
 
     return response
 
 
-# Request logging middleware
+# Request context: ID, body-size check, basic rate limiting, access log
+_rate_limit_bucket: Dict[str, Dict[str, float]] = {}
+
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     start_time = time.time()
+
+    # Assign or propagate request ID
+    request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+
+    # Basic body size guard based on Content-Length
+    max_bytes = settings.max_upload_size_mb * 1024 * 1024
+    content_length = request.headers.get("content-length")
+    if content_length and content_length.isdigit():
+        if int(content_length) > max_bytes:
+            return JSONResponse(status_code=413, content={"detail": "Request entity too large"})
+
+    # Simple IP-based rate limiting (token bucket approximation)
+    client_ip = request.client.host if request.client else "unknown"
+    now = time.time()
+    window = 60.0
+    limit = max(1, settings.api_rate_limit)
+    bucket = _rate_limit_bucket.get(client_ip, {"window_start": now, "count": 0.0})
+    if now - bucket["window_start"] > window:
+        bucket = {"window_start": now, "count": 0.0}
+    bucket["count"] += 1.0
+    _rate_limit_bucket[client_ip] = bucket
+    if bucket["count"] > limit:
+        return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded"})
+
     response = await call_next(request)
     process_time = time.time() - start_time
+    response.headers["X-Request-ID"] = request_id
     logger.info(
-        f"{request.method} {request.url.path} - {response.status_code} - {process_time:.3f}s"
+        f"request_id={request_id} {request.method} {request.url.path} - {response.status_code} - {process_time:.3f}s"
     )
     return response
 
@@ -135,6 +168,38 @@ async def startup_event():
     
     print("🌐 API available at: http://localhost:8000")
     print("📚 API docs at: http://localhost:8000/docs")
+
+    # Kick off background warm-up to avoid cold starts without blocking readiness
+    def _warmup():
+        try:
+            logger.info("Starting background warm-up tasks")
+            # Pre-import provider modules and instantiate once to warm caches
+            try:
+                from src.core.llm_providers.factory import get_available_providers
+
+                _ = get_available_providers()
+            except Exception as e:
+                logger.debug(f"Provider availability warm-up skipped: {e}")
+
+            # Pre-import document parsers
+            try:
+                import fitz  # noqa: F401
+            except Exception:
+                pass
+            try:
+                import pymupdf4llm  # noqa: F401
+            except Exception:
+                pass
+            try:
+                from docx import Document as _Doc  # noqa: F401
+            except Exception:
+                pass
+
+            logger.info("Background warm-up completed")
+        except Exception as e:
+            logger.debug(f"Warm-up error: {e}")
+
+    threading.Thread(target=_warmup, daemon=True).start()
 
 
 if __name__ == "__main__":

@@ -10,6 +10,12 @@ AI-powered job application assistant with document processing and chat interface
 ```bash
 git clone <repository-url>
 cd job_application_helper
+
+# Setup Docker environment (creates necessary directories and configs)
+./setup-docker-env.sh        # Linux/macOS
+setup-docker-env.bat         # Windows
+
+# Start application
 docker compose up -d
 ```
 **Access:** http://localhost:8080 → Configure API keys in the web interface

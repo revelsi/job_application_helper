@@ -6,7 +6,6 @@ FROM python:3.9-slim
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONPATH=/app
 
 # Install system dependencies and UV
@@ -42,6 +41,12 @@ RUN mkdir -p data/{documents,cache} && \
     chown -R appuser:appuser /home/appuser/.cache && \
     chown -R appuser:appuser /home/appuser/.local
 
+# Switch to appuser for the rest of the build
+USER appuser
+
+# Precompile Python bytecode to speed up imports on cold start
+RUN python -m compileall -q /app
+
 # Switch to non-root user
 USER appuser
 
@@ -52,5 +57,5 @@ HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
 # Expose port
 EXPOSE 8000
 
-# Start the application using UV
-CMD ["uv", "run", "python", "start_api.py"]
+# Start the application using Gunicorn with Uvicorn workers (production)
+CMD ["uv", "run", "gunicorn", "-k", "uvicorn.workers.UvicornWorker", "-w", "2", "-b", "0.0.0.0:8000", "src.api.main:app", "--timeout", "120", "--graceful-timeout", "30", "--access-logfile", "-", "--error-logfile", "-"]

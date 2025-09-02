@@ -45,6 +45,12 @@ mkdir data\documents 2>nul
 mkdir data\cache 2>nul
 echo ✅ Data directories created
 
+REM Create Docker secrets directory for production deployments (optional)
+echo ℹ️  Creating Docker secrets directory...
+mkdir backend\.secrets 2>nul
+echo ✅ Docker secrets directory created
+echo ℹ️  To use custom encryption keys in Docker, add them to backend\.secrets\encryption_key
+
 REM Setup backend with UV
 echo ℹ️  Setting up backend with UV...
 cd backend

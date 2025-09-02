@@ -23,8 +23,8 @@ services:
       - TRANSFORMERS_CACHE=/home/appuser/.cache/torch/sentence_transformers
       # Enable encryption (will auto-generate key if not provided)
       - ENABLE_ENCRYPTION=true
-      # Auto-generate encryption key for Docker containers
-      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-}
+      # Use Docker secret for encryption key if provided
+      - ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
       # Data paths
       - DATA_DIR=/app/data
       - DOCUMENTS_PATH=/app/data/documents
@@ -42,6 +42,8 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
+    secrets:
+      - encryption_key
 
   frontend:
     build:
@@ -103,3 +105,10 @@ volumes:
   ollama_data:
     driver: local
     name: ollama-data
+
+# Secrets are optional - if not provided, the app will auto-generate encryption keys
+# To use custom encryption keys, create backend/.secrets/encryption_key file
+# Note: Remove the secrets section below if you don't want to use Docker secrets
+secrets:
+  encryption_key:
+    file: ./backend/.secrets/encryption_key

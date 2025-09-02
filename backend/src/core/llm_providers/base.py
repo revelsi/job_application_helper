@@ -289,10 +289,25 @@ class LLMProvider(ABC):
                 f"Generating {request.content_type.value} content with {model}"
             )
 
-            # Make API call
-            response = self._make_api_call(
-                messages, model, max_tokens, request.temperature, request.reasoning_effort, request.verbosity
-            )
+            # Make API call with simple retries/backoff
+            max_attempts = 3
+            backoff = 0.5
+            last_error: Optional[Exception] = None
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    response = self._make_api_call(
+                        messages, model, max_tokens, request.temperature, request.reasoning_effort, request.verbosity
+                    )
+                    break
+                except Exception as e:  # noqa: BLE001 - propagate after retries
+                    last_error = e
+                    self.logger.warning(
+                        f"API call failed (attempt {attempt}/{max_attempts}): {e}"
+                    )
+                    if attempt == max_attempts:
+                        raise
+                    time.sleep(backoff)
+                    backoff *= 2
 
             # Update rate limiting
             self._rate_limit_info["requests_made"] += 1
@@ -304,8 +319,7 @@ class LLMProvider(ABC):
             generation_time = time.time() - start_time
 
             self.logger.info(
-                f"Content generated successfully in {generation_time:.2f}s, "
-                f"tokens: {tokens_used}"
+                f"Content generated successfully in {generation_time:.2f}s, tokens: {tokens_used}"
             )
 
             return GenerationResponse(
