@@ -241,6 +241,11 @@ bandit_report.json
 security_audit_*.json
 security-reports/
 SECURITY_TODO.md
+gitleaks.sarif
+*.sarif
+backend/safety-report.json
+frontend/npm-audit-report.json
+backend/requirements.txt
 
 # CRITICAL: Security scan files that were accidentally committed
 docker-security-check.json

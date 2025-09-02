@@ -5,6 +5,7 @@ on:
     branches: [ main, develop ]
   pull_request:
     branches: [ main, develop ]
+  workflow_dispatch:
   schedule:
     # Run weekly security scans
     - cron: '0 2 * * 1'
@@ -31,10 +32,28 @@ jobs:
       run: |
         pip install semgrep
 
+    - name: Install Bandit
+      run: |
+        pip install bandit
+
     - name: Run Security Scan
       run: |
         chmod +x security-scan.sh
         ./security-scan.sh
+
+    - name: Run Bandit (Python SAST)
+      run: |
+        mkdir -p security-reports
+        bandit -r backend/src -f json -o security-reports/bandit.json || true
+
+    - name: Trivy filesystem scan (repo configs, IaC, secrets)
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        format: 'json'
+        output: 'security-reports/trivy-fs.json'
+        severity: 'HIGH,CRITICAL'
+        ignore-unfixed: true
         
     - name: Generate Security Summary
       run: |
@@ -55,7 +74,7 @@ jobs:
         reports = ['security-reports/security-vulnerabilities.json', 'security-reports/python-security.json', 
                    'security-reports/typescript-security.json', 'security-reports/auth-security.json',
                    'security-reports/file-upload-security.json', 'security-reports/web-security.json',
-                   'security-reports/secrets-scan.json']
+                   'security-reports/secrets-scan.json', 'security-reports/semgrep-ci.json']
 
         for report in reports:
             findings = load_findings(report)
@@ -178,14 +197,18 @@ jobs:
       with:
         node-version: '18'
 
-    - name: Install safety (Python dependency scanner)
+    - name: Install uv and safety (Python dependency scanner)
       run: |
         pip install safety
+        python3 -m pip install pipx || true
+        python3 -m pipx ensurepath || true
+        pipx install uv || true
 
     - name: Scan Python dependencies
       run: |
         cd backend
-        safety check --json --output safety-report.json || true
+        uv export --format=requirements-txt > requirements.txt
+        safety check -r requirements.txt --json > safety-report.json || true
 
     - name: Install npm audit
       run: |
@@ -274,3 +297,41 @@ jobs:
           trivy-backend-results.sarif
           trivy-frontend-results.sarif
         retention-days: 30 
+
+  secrets-scan:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Gitleaks scan
+      uses: gitleaks/gitleaks-action@v2
+      continue-on-error: true
+      with:
+        args: --verbose --redact --report-format sarif --report-path gitleaks.sarif
+
+    - name: Upload Gitleaks Report
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: gitleaks-report
+        path: gitleaks.sarif
+        retention-days: 30
+
+  dockerfile-lint:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Lint backend Dockerfile
+      uses: hadolint/hadolint-action@v3.1.0
+      continue-on-error: true
+      with:
+        dockerfile: backend/Dockerfile
+
+    - name: Lint frontend Dockerfile
+      uses: hadolint/hadolint-action@v3.1.0
+      continue-on-error: true
+      with:
+        dockerfile: frontend/Dockerfile

@@ -439,3 +439,98 @@ rules:
     metadata:
       category: security
       cwe: "CWE-20: Improper Input Validation"
+
+  # =============================================================================
+  # NETWORK / SSRF / COMMAND EXECUTION / DESERIALIZATION / CRYPTO / JWT
+  # =============================================================================
+
+  - id: ssrf-unvalidated-url
+    patterns:
+      - pattern-either:
+          - pattern: requests.$METHOD($URL, ...)
+          - pattern: httpx.$METHOD($URL, ...)
+          - pattern: aiohttp.$METHOD($URL, ...)
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: ^(get|post|put|delete|head|options|patch)$
+    message: "Possible SSRF: ensure $URL is validated against an allowlist and scheme is https."
+    severity: WARNING
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-918: Server-Side Request Forgery (SSRF)"
+
+  - id: subprocess-shell-true
+    patterns:
+      - pattern-either:
+          - pattern: subprocess.run($CMD, shell=True, ...)
+          - pattern: subprocess.Popen(..., shell=True, ...)
+          - pattern: os.system($CMD)
+    message: "Command execution with shell=True or os.system. Avoid shell=True and validate inputs."
+    severity: ERROR
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-78: OS Command Injection"
+
+  - id: yaml-unsafe-load
+    patterns:
+      - pattern: yaml.load($DATA)
+      - pattern-not: yaml.load($DATA, Loader=yaml.SafeLoader)
+    message: "Unsafe yaml.load detected. Use yaml.safe_load or SafeLoader."
+    severity: ERROR
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-20: Improper Input Validation"
+
+  - id: insecure-deserialization-pickle
+    patterns:
+      - pattern-either:
+          - pattern: pickle.loads($DATA)
+          - pattern: pickle.load($FILE)
+    message: "Insecure deserialization via pickle. Never unpickle untrusted data."
+    severity: ERROR
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+
+  - id: jwt-verification-disabled
+    patterns:
+      - pattern-either:
+          - pattern: jwt.decode($TOKEN, ..., verify=False, ...)
+          - pattern: jwt.decode($TOKEN, ..., options={"verify_signature": False, ...}, ...)
+    message: "JWT verification disabled. Do not disable signature verification in production."
+    severity: ERROR
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-345: Insufficient Verification of Data Authenticity"
+
+  - id: insecure-randomness-for-secrets
+    patterns:
+      - pattern: $NAME = random.$FUNC(...)
+      - metavariable-regex:
+          metavariable: $NAME
+          regex: .*(token|secret|key|password|otp|code).*
+    message: "Insecure randomness used for sensitive values. Use secrets module instead."
+    severity: WARNING
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-338: Use of Cryptographically Weak PRNG"
+
+  - id: cors-wildcard-with-credentials
+    patterns:
+      - pattern-either:
+          - pattern: |
+              CORSMiddleware(..., allow_credentials=True, ..., allow_origins=["*"], ...)
+          - pattern: |
+              CORSMiddleware(..., allow_origins=["*"], ..., allow_credentials=True, ...)
+    message: "CORS allows credentials with wildcard origin. Specify explicit origins when allow_credentials=True."
+    severity: ERROR
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-942: Permissive Cross-domain Policy with Untrusted Domains"

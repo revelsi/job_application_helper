@@ -71,6 +71,13 @@ launch_app.bat
 start-containers.sh
 start-containers.bat
 
+# Security outputs and reports (not needed in images)
+security-reports/
+*.sarif
+gitleaks.sarif
+backend/safety-report.json
+frontend/npm-audit-report.json
+
 # Process files
 *.pid
 backend.pid

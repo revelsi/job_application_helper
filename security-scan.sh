@@ -76,6 +76,15 @@ semgrep scan \
     --verbose \
     backend/ frontend/ || true
 
+echo "🧩 Running Semgrep community security packs (p/ci) with custom rules..."
+semgrep scan \
+    --config=p/ci \
+    --config=.semgrep.yml \
+    --output=security-reports/semgrep-ci.json \
+    --json \
+    --verbose \
+    backend/ frontend/ || true
+
 echo "✅ Security scan completed!"
 echo "📊 Reports saved in security-reports/ directory"
 
@@ -98,7 +107,7 @@ all_findings = []
 for report in ['security-vulnerabilities.json', 'python-security.json', 
                'typescript-security.json', 'auth-security.json', 
                'file-upload-security.json', 'web-security.json',
-               'secrets-scan.json']:
+               'secrets-scan.json', 'semgrep-ci.json']:
     findings = load_findings(f'security-reports/{report}')
     all_findings.extend(findings)
 
