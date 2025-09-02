@@ -240,4 +240,12 @@ bandit_report.json
 *.security.json
 security_audit_*.json
 security-reports/
-SECURITY_TODO.md 
+SECURITY_TODO.md
+
+# CRITICAL: Security scan files that were accidentally committed
+docker-security-check.json
+security-findings.json
+security-vulnerabilities.json
+custom-security-findings.json
+remaining-issues.json
+test-validation-fixes.json 
