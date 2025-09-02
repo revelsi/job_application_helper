@@ -106,8 +106,3 @@ Thumbs.db
 
 # Git
 .git/
-.gitignore
-
-# Documentation (optional - remove if you want Cursor to index docs)
-docs/phases/
-evaluation_results/ 
