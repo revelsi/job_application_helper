@@ -21,8 +21,8 @@ interface Document {
   tags: string[];
 }
 
-interface DocumentListResponse {
-  documents: Document[];
+interface DocumentListResponseRaw {
+  documents: any[];
 }
 
 interface ClearResponse {
@@ -58,16 +58,35 @@ const Index = () => {
     currentJobTitle: undefined as string | undefined
   });
 
+  // Normalize backend -> frontend document shape
+  const normalizeDocument = (raw: any): Document => {
+    const filename = raw?.filename ?? raw?.original_filename ?? 'untitled';
+    const size = typeof raw?.file_size === 'number' ? raw.file_size : (typeof raw?.size === 'number' ? raw.size : 0);
+    const uploadDate = raw?.upload_timestamp ?? raw?.upload_date ?? new Date().toISOString();
+    const category = (raw?.category === 'job-specific' || raw?.category === 'personal') ? raw.category : 'personal';
+    const type = raw?.type ?? raw?.document_type ?? 'unknown';
+    return {
+      id: String(raw?.id ?? raw?.document_id ?? crypto.randomUUID()),
+      filename,
+      type,
+      size,
+      upload_date: String(uploadDate),
+      category,
+      tags: Array.isArray(raw?.tags) ? raw.tags : []
+    };
+  };
+
   // Fetch existing documents from the backend
   const fetchExistingDocuments = useCallback(async () => {
     try {
-      const response = await apiClient.get<DocumentListResponse>('/documents/list');
+      const response = await apiClient.get<DocumentListResponseRaw>('/documents/list');
       if (response.success && response.data) {
-        setExistingDocuments(response.data.documents);
+        const normalized = (response.data.documents || []).map(normalizeDocument);
+        setExistingDocuments(normalized);
         
         // Update session data with document counts
-        const personalCount = response.data.documents.filter((doc: Document) => doc.category === 'personal').length;
-        const jobCount = response.data.documents.filter((doc: Document) => doc.category === 'job-specific').length;
+        const personalCount = normalized.filter((doc: Document) => doc.category === 'personal').length;
+        const jobCount = normalized.filter((doc: Document) => doc.category === 'job-specific').length;
         
         setSessionData(prev => ({
           ...prev,

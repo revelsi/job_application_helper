@@ -25,7 +25,7 @@ export default tseslint.config(
       ],
       // Disable rule causing crash under ESLint v9 flat config
       "@typescript-eslint/no-unused-expressions": "off",
-      "@typescript-eslint/no-unused-vars": "off",
+      "@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
       "@typescript-eslint/no-empty-object-type": "off",
       "@typescript-eslint/no-require-imports": "warn",
     },

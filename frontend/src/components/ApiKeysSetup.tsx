@@ -470,7 +470,7 @@ export const ApiKeysSetup: React.FC<ApiKeysSetupProps> = ({ isOpen, onClose, onS
                         <div className="text-xs text-muted-foreground">
                           {(() => {
                             const providerData = providerInfo.find(p => p.type === 'openai');
-                            return providerData?.default_model || 'GPT-5 Mini';
+                            return providerData?.default_model || 'gpt-5-mini';
                           })()}
                         </div>
                       </div>
@@ -652,8 +652,8 @@ export const ApiKeysSetup: React.FC<ApiKeysSetupProps> = ({ isOpen, onClose, onS
               Security & Privacy
             </h4>
             <p className="text-xs text-blue-700 dark:text-blue-300">
-              Your API keys are encrypted using industry-standard encryption and stored locally. 
-              They are never transmitted to our servers and are only used to make API calls to the respective providers.
+              Your API keys are securely handled by the backend for usage and storage. They are only used to call the
+              respective providers and are never exposed in client-side code.
             </p>
           </div>
         </div>

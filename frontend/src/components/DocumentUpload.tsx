@@ -38,6 +38,27 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({
     jobSpecific: false
   });
 
+  // Safe formatters
+  const safeFormatFileSize = (bytes: number | undefined | null) => {
+    const value = typeof bytes === 'number' && isFinite(bytes) && bytes >= 0 ? bytes : 0;
+    if (value === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.min(sizes.length - 1, Math.floor(Math.log(value) / Math.log(k)) || 0);
+    const amount = parseFloat((value / Math.pow(k, i)).toFixed(2));
+    return `${amount} ${sizes[i]}`;
+  };
+
+  const safeFormatDate = (isoLike: string | undefined | null) => {
+    try {
+      const d = isoLike ? new Date(isoLike) : new Date(NaN);
+      const isValid = !isNaN(d.getTime());
+      return isValid ? d.toLocaleDateString() : 'Unknown date';
+    } catch {
+      return 'Unknown date';
+    }
+  };
+
   // Update documents when existingDocuments prop changes
   useEffect(() => {
     setDocuments(existingDocuments);
@@ -301,11 +322,11 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({
                       <div className="flex items-center gap-4 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1">
                           <HardDrive className="h-3 w-3" />
-                          {formatFileSize(doc.size)}
+                          {safeFormatFileSize(doc.size)}
                         </span>
                         <span className="flex items-center gap-1">
                           <Clock className="h-3 w-3" />
-                          {new Date(doc.upload_date).toLocaleDateString()}
+                          {safeFormatDate(doc.upload_date)}
                         </span>
                       </div>
                     </div>

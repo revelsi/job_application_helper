@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { apiClient } from '@/lib/api';
+import MarkdownRenderer from '@/components/MarkdownRenderer';
 import { useApiKeys } from '@/hooks/useApiKeys';
 
 interface Message {
@@ -102,6 +103,16 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSendMessage, isL
 
   const availableProviders = getAvailableProviders();
 
+  // Load persisted provider/model on mount
+  useEffect(() => {
+    try {
+      const p = localStorage.getItem('jah_provider');
+      const m = localStorage.getItem('jah_model');
+      if (p) setSelectedProvider(p);
+      if (m) setSelectedModel(m);
+    } catch {}
+  }, []);
+
   // Initialize default provider/model selection
   useEffect(() => {
     if (availableProviders.length > 0 && !selectedProvider) {
@@ -121,8 +132,15 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSendMessage, isL
   useEffect(() => {
     const newSessionId = generateSessionId();
     setSessionId(newSessionId);
-    console.log('Generated new session ID:', newSessionId);
   }, []);
+
+  // Persist selection
+  useEffect(() => {
+    try {
+      if (selectedProvider) localStorage.setItem('jah_provider', selectedProvider);
+      if (selectedModel) localStorage.setItem('jah_model', selectedModel);
+    } catch {}
+  }, [selectedProvider, selectedModel]);
 
   const isNearBottom = () => {
     if (!messagesContainerRef.current) return true;
@@ -463,7 +481,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSendMessage, isL
           setCurrentAiMessageId('');
           const newSessionId = generateSessionId();
           setSessionId(newSessionId);
-          console.log('Generated new session ID after partial clear:', newSessionId);
           alert('Warning: Frontend cleared but there may have been an issue clearing the backend session.');
         }
       } catch (error) {
@@ -476,7 +493,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSendMessage, isL
         setCurrentAiMessageId('');
         const newSessionId = generateSessionId();
         setSessionId(newSessionId);
-        console.log('Generated new session ID after error:', newSessionId);
         alert('Chat cleared from interface, but there may have been an issue clearing the backend session.');
       }
     }
@@ -569,7 +585,13 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSendMessage, isL
                       : 'glass border-glass-border bg-white/50'
                   }`}
                 >
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
+                  {message.role === 'assistant' ? (
+                    <div className="text-sm leading-relaxed">
+                      <MarkdownRenderer content={message.content} />
+                    </div>
+                  ) : (
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
+                  )}
                   <p className={`text-xs mt-3 ${
                     message.role === 'user' ? 'text-white/70' : 'text-muted-foreground'
                   }`}>
@@ -665,6 +687,11 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSendMessage, isL
           <div className="flex items-center gap-2">
             <Settings className="h-3.5 w-3.5 text-muted-foreground" />
             <div className="flex items-center gap-2 flex-1">
+              {selectedProvider && (
+                <span className="text-[11px] px-2 py-0.5 rounded border bg-muted/40 text-muted-foreground">
+                  Active: {availableProviders.find(p => p.key === selectedProvider)?.name} · {selectedModel}
+                </span>
+              )}
               <div className="flex items-center gap-1.5">
                 <span className="text-xs text-muted-foreground">Provider:</span>
                 <Select 
