@@ -119,21 +119,18 @@ class OpenAIProvider(LLMProvider):
 
     def _supports_reasoning_effort(self, model: str) -> bool:
         """Check if a model supports reasoning_effort parameter."""
-        # Currently only GPT-5-mini supports reasoning_effort
-        reasoning_models = ["gpt-5-mini"]
-        return model in reasoning_models
+        # GPT-5 family supports reasoning_effort
+        return isinstance(model, str) and model.startswith("gpt-5")
     
     def _supports_temperature(self, model: str) -> bool:
         """Check if a model supports temperature parameter."""
-        # GPT-5 models do not support temperature parameter
-        gpt5_models = ["gpt-5-mini"]
-        return model not in gpt5_models
+        # GPT-5 family does not support temperature parameter
+        return not (isinstance(model, str) and model.startswith("gpt-5"))
     
     def _supports_verbosity(self, model: str) -> bool:
         """Check if a model supports verbosity parameter."""
-        # Currently only GPT-5-mini supports verbosity
-        verbosity_models = ["gpt-5-mini"]
-        return model in verbosity_models
+        # GPT-5 family supports verbosity
+        return isinstance(model, str) and model.startswith("gpt-5")
 
     @property
     def client(self) -> OpenAI:
@@ -177,8 +174,8 @@ class OpenAIProvider(LLMProvider):
             else:
                 self.logger.debug(f"Skipping temperature parameter for model: {model} (not supported)")
             
-            # Use max_completion_tokens for GPT-5-mini, max_tokens for other models
-            if model == "gpt-5-mini":
+            # Use max_completion_tokens for GPT-5 family, max_tokens for other models
+            if isinstance(model, str) and model.startswith("gpt-5"):
                 api_params["max_completion_tokens"] = safe_max_tokens
             else:
                 api_params["max_tokens"] = safe_max_tokens
@@ -257,8 +254,8 @@ class OpenAIProvider(LLMProvider):
             else:
                 self.logger.debug(f"Skipping temperature parameter for streaming with model: {model} (not supported)")
             
-            # Use max_completion_tokens for GPT-5-mini, max_tokens for other models
-            if model == "gpt-5-mini":
+            # Use max_completion_tokens for GPT-5 family, max_tokens for other models
+            if isinstance(model, str) and model.startswith("gpt-5"):
                 stream_params["max_completion_tokens"] = max_tokens
             else:
                 stream_params["max_tokens"] = max_tokens
