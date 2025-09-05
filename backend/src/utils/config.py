@@ -58,6 +58,13 @@ class Settings(BaseSettings):
     huggingface_base_url: Optional[str] = Field(
         default="https://api-inference.huggingface.co", env="HUGGINGFACE_BASE_URL"
     )
+    # Embeddings Configuration
+    embedding_model_name: str = Field(
+        default="sentence-transformers/all-MiniLM-L6-v2", env="EMBEDDING_MODEL_NAME"
+    )
+    embedding_cache_dir: Optional[Path] = Field(
+        default=None, env="EMBEDDING_CACHE_DIR"
+    )
 
     # External APIs
     linkedin_api_key: Optional[str] = Field(default=None, env="LINKEDIN_API_KEY")

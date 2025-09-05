@@ -33,6 +33,10 @@ RUN uv sync --no-dev --no-cache
 # Copy application code
 COPY . .
 
+# Ensure the virtual environment is used at runtime
+ENV VIRTUAL_ENV=/app/.venv
+ENV PATH="/app/.venv/bin:${PATH}"
+
 # Create data directories and set up permissions
 RUN mkdir -p data/{documents,cache} && \
     mkdir -p /home/appuser/.cache/uv && \
@@ -50,12 +54,12 @@ RUN python -m compileall -q /app
 # Switch to non-root user
 USER appuser
 
-# Health check
+# Health check (avoid invoking uv at runtime)
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD uv run python -c "import requests; requests.get('http://localhost:8000/health')" || exit 1
+    CMD curl -fsS http://localhost:8000/health/ || exit 1
 
 # Expose port
 EXPOSE 8000
 
-# Start the application using Gunicorn with Uvicorn workers (production)
+# Start the application using uv run (fastest startup)
 CMD ["uv", "run", "gunicorn", "-k", "uvicorn.workers.UvicornWorker", "-w", "2", "-b", "0.0.0.0:8000", "src.api.main:app", "--timeout", "120", "--graceful-timeout", "30", "--access-logfile", "-", "--error-logfile", "-"]

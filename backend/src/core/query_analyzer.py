@@ -15,25 +15,35 @@ limitations under the License.
 """
 
 """
-LLM-based Query Analyzer for Job Application Helper.
+Embeddings-based Semantic Query Analyzer for Job Application Helper.
 
-This module provides sophisticated query analysis using LLM providers for:
-- Intent detection and classification
-- Document relevance weighting
-- Query expansion and refinement
-- Multi-query detection and handling
-- Context-aware analysis
+This module provides lightweight, fast query analysis using sentence-transformer
+embeddings instead of invoking an LLM for routing. It performs:
+- Intent routing via semantic similarity against canonical intent prompts
+- Document relevance weighting based on similarity to category exemplars
+- Optional query expansion via nearest-neighbor variants (cheap heuristic)
 
-The analyzer uses the same LLM infrastructure as other components for consistent,
-intelligent query understanding and routing.
+Design goals:
+- Remove per-message LLM call overhead from the analyzer path
+- Keep the same external interface (QueryAnalysis) for compatibility
+- Deterministic and fast with minimal memory footprint
 """
 
 from dataclasses import dataclass
 import json
 from typing import Any, Dict, List, Optional
 
-from src.core.llm_providers.base import ContentType, GenerationRequest, LLMProvider
+from src.core.llm_providers.base import LLMProvider
 from src.utils.logging import get_logger
+from src.utils.config import get_settings
+
+try:
+    # Import lazily to avoid heavy import cost during cold start if unused
+    from sentence_transformers import SentenceTransformer
+    import numpy as np
+except Exception:  # pragma: no cover - handled at runtime with graceful fallback
+    SentenceTransformer = None  # type: ignore
+    np = None  # type: ignore
 
 logger = get_logger(__name__)
 
@@ -71,24 +81,76 @@ class QueryAnalyzer:
     """
 
     def __init__(self, llm_provider: LLMProvider):
-        """
-        Initialize the query analyzer.
-
-        Args:
-            llm_provider: LLM provider for analysis (required)
-        """
+        """Initialize the embeddings-based analyzer and load the model."""
         if llm_provider is None:
             raise ValueError("LLM provider is required for QueryAnalyzer")
-            
-        self.llm_provider = llm_provider
-        self.llm_available = self.llm_provider.is_available()
 
-        if not self.llm_available:
-            logger.warning(
-                "Query analyzer initialized with unavailable LLM provider - using fallback rules"
-            )
+        self.llm_provider = llm_provider
+        self.settings = get_settings()
+
+        # Initialize embeddings model
+        self.embedding_model_name = self.settings.embedding_model_name
+        self.embedding_cache_dir = (
+            str(self.settings.embedding_cache_dir)
+            if getattr(self.settings, "embedding_cache_dir", None)
+            else None
+        )
+
+        self.embedder = None
+        self.embeddings_available = False
+        # Backward-compatibility flag expected by SimpleChatController/tests
+        self.llm_available = False
+
+        if SentenceTransformer is not None:
+            try:
+                self.embedder = SentenceTransformer(
+                    self.embedding_model_name,
+                    cache_folder=self.embedding_cache_dir,
+                )
+                self.embeddings_available = True
+                self.llm_available = True
+                logger.info(
+                    f"Query analyzer using embeddings model: {self.embedding_model_name}"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to load embeddings model: {e}")
         else:
-            logger.info("Query analyzer initialized with LLM provider")
+            logger.warning("sentence-transformers not installed; falling back to rules")
+
+        # Precompute canonical intent exemplars and document category exemplars
+        self.intent_labels = [
+            "cover_letter",
+            "behavioral_interview",
+            "interview_answer",
+            "content_refinement",
+            "ats_optimizer",
+            "achievement_quantifier",
+            "general",
+        ]
+
+        self.intent_texts = {
+            "cover_letter": "Requests to write or craft a professional cover letter.",
+            "behavioral_interview": "Behavioral interview questions using STAR method, experiences.",
+            "interview_answer": "General interview Q&A, responding to interview questions.",
+            "content_refinement": "Improve, refine, or optimize existing text content.",
+            "ats_optimizer": "Optimize resume or content for ATS and keywords.",
+            "achievement_quantifier": "Quantify achievements, metrics, impact in resume or letters.",
+            "general": "General career advice or miscellaneous requests.",
+        }
+
+        self.document_categories = ["candidate", "job", "company"]
+        self.document_texts = {
+            "candidate": "Information about the candidate, resume, CV, personal background.",
+            "job": "Job description, role requirements, responsibilities, qualifications.",
+            "company": "Company background, culture, mission, values, news.",
+        }
+
+        # Cache exemplar embeddings
+        self.intent_matrix = None
+        self.doccat_matrix = None
+        if self.embeddings_available:
+            self.intent_matrix = self._embed([self.intent_texts[i] for i in self.intent_labels])
+            self.doccat_matrix = self._embed([self.document_texts[c] for c in self.document_categories])
 
     def analyze_query(
         self, query: str, conversation_history: Optional[List[Dict[str, Any]]] = None
@@ -103,144 +165,62 @@ class QueryAnalyzer:
         Returns:
             QueryAnalysis with intent, weights, and metadata
         """
-        if not self.llm_available:
-            logger.debug("No LLM available - using rule-based analysis")
+        if not self.embeddings_available:
+            logger.debug("Embeddings unavailable - using rule-based analysis")
             return self._fallback_analysis(query)
 
         try:
-            # Use LLM for sophisticated query analysis
-            return self._llm_analysis(query, conversation_history)
+            return self._embedding_analysis(query)
         except Exception as e:
-            logger.warning(f"LLM query analysis failed: {e}")
+            logger.warning(f"Embeddings analysis failed: {e}")
             return self._fallback_analysis(query)
 
-    def _llm_analysis(
-        self, query: str, conversation_history: Optional[List[Dict[str, Any]]] = None
-    ) -> QueryAnalysis:
-        """
-        Perform LLM-based query analysis for sophisticated intent detection.
+    def _embedding_analysis(self, query: str) -> QueryAnalysis:
+        """Perform semantic routing using embeddings and cosine similarity."""
+        assert self.embedder is not None and np is not None
 
-        Args:
-            query: User query to analyze
-            conversation_history: Recent conversation context
+        query_vec = self._embed([query])  # shape (1, d)
 
-        Returns:
-            QueryAnalysis with LLM-determined intent and weights
-        """
-        # Build context from conversation history
-        context_summary = ""
-        if conversation_history:
-            recent_messages = conversation_history[-3:]  # Last 3 exchanges
-            context_summary = "\n".join(
-                [
-                    f"{'User' if (hasattr(msg, 'role') and (msg.role.value if hasattr(msg.role, 'value') else str(msg.role)) == 'user') or (isinstance(msg, dict) and msg.get('role') == 'user') else 'Assistant'}: {(msg.content if hasattr(msg, 'content') else msg.get('content', ''))[:200]}"
-                    for msg in recent_messages
-                ]
-            )
+        # Intent classification
+        intent_scores = self._cosine_sim(query_vec, self.intent_matrix)[0]
+        best_intent_idx = int(np.argmax(intent_scores))
+        intent_type = self.intent_labels[best_intent_idx]
+        intent_confidence = float(intent_scores[best_intent_idx])
 
-        # Create simplified analysis prompt
-        analysis_prompt = f"""Analyze this job application query: "{query}"
+        # Document weighting
+        doc_scores = self._cosine_sim(query_vec, self.doccat_matrix)[0]
+        # Convert to non-negative and normalize
+        doc_scores = np.clip(doc_scores, 0.0, None)
+        total = float(np.sum(doc_scores)) or 1.0
+        weights = {
+            cat: float(score) / total for cat, score in zip(self.document_categories, doc_scores)
+        }
 
-Respond with ONLY a JSON object in this exact format:
+        # Simple multi-query heuristic
+        is_multi_query = any(sep in query for sep in [";", " and ", " also ", "? " ])
 
-{{
-    "intent_type": "general",
-    "document_weights": {{
-        "candidate": 0.4,
-        "job": 0.3,
-        "company": 0.3
-    }},
-    "is_multi_query": false,
-    "expanded_queries": [],
-    "confidence": 0.8,
-    "reasoning": "Analysis complete"
-}}
+        # Lightweight expansion: take top-2 intent synonyms as hints (no LLM call)
+        expanded_queries = []
+        if intent_type == "cover_letter":
+            expanded_queries = ["tailored cover letter", "quantified achievements"]
+        elif intent_type in {"behavioral_interview", "interview_answer"}:
+            expanded_queries = ["STAR method example", "concise interview answer"]
+        elif intent_type == "content_refinement":
+            expanded_queries = ["refine this text", "improve clarity and impact"]
+        elif intent_type == "ats_optimizer":
+            expanded_queries = ["ATS keywords", "optimize resume for ATS"]
+        elif intent_type == "achievement_quantifier":
+            expanded_queries = ["quantify results", "metrics and impact"]
 
-Intent types: cover_letter, behavioral_interview, achievement_quantifier, ats_optimizer, interview_answer, content_refinement, general
-
-Document weights must sum to 1.0. Higher candidate weight for personal questions, higher job weight for role questions, higher company weight for company questions."""
-
-        # Use LLM for analysis - choose appropriate small/fast model based on provider
-        # Determine the best small model for the current provider
-        small_model = None
-        if hasattr(self.llm_provider, "provider_type"):
-            provider_type_str = self.llm_provider.provider_type.value if hasattr(self.llm_provider.provider_type, 'value') else str(self.llm_provider.provider_type)
-            if provider_type_str == "openai":
-                small_model = "gpt-5-nano"  # Faster, cheaper reasoning model for analysis
-            elif provider_type_str == "mistral":
-                small_model = "mistral-small-latest"  # Mistral's lightweight model for classification
-            elif provider_type_str == "ollama":
-                # For Ollama, we could use a smaller local model like llama3.2:1b for analysis
-                # But this requires the model to be available locally
-                small_model = None  # Use default model for now
-            # For other providers (Novita, etc.), use their default model
-
-        # For now, let's use the default model to avoid potential issues
-        # small_model = None  # Use default model
-
-        request = GenerationRequest(
-            prompt=analysis_prompt,
-            content_type=ContentType.GENERAL_RESPONSE,
-            context={"task": "query_analysis"},
-            max_tokens=500,
-            reasoning_effort="minimal",
-            # Remove temperature parameter for GPT-5-mini compatibility
-            # temperature=0.2,  # Low temperature for consistent analysis
-            model=small_model,  # Use provider-appropriate small/fast model
+        return QueryAnalysis(
+            intent_type=intent_type,
+            intent_parameters={},
+            document_weights=self._normalize_weights(weights),
+            is_multi_query=is_multi_query,
+            expanded_queries=expanded_queries,
+            confidence=float(min(max(intent_confidence, 0.0), 1.0)),
+            reasoning="Embeddings-based semantic routing",
         )
-        
-        provider_type_str = self.llm_provider.provider_type.value if hasattr(self.llm_provider.provider_type, 'value') else str(self.llm_provider.provider_type)
-        logger.debug(f"Query analyzer using model: {small_model} for provider: {provider_type_str}")
-        logger.debug(f"Query analyzer prompt length: {len(analysis_prompt)}")
-
-        response = self.llm_provider.generate_content(request)
-
-        if not response.success:
-            logger.error(f"LLM query analysis failed: {response.error}")
-            return self._fallback_analysis(query)
-
-        # Check if response content is empty or None
-        if not response.content or not response.content.strip():
-            logger.error(f"LLM query analysis returned empty content. Response: {response}")
-            return self._fallback_analysis(query)
-
-        try:
-            # Parse LLM response
-            content = response.content.strip()
-            logger.debug(f"Raw LLM query analysis response: {content[:200]}...")
-
-            # Clean JSON from markdown formatting
-            if content.startswith("```json"):
-                content = content[7:]
-            if content.endswith("```"):
-                content = content[:-3]
-            content = content.strip()
-
-            # Check if content is still empty after cleaning
-            if not content:
-                logger.error("LLM query analysis content is empty after cleaning")
-                return self._fallback_analysis(query)
-
-            analysis_data = json.loads(content)
-
-            # Validate and normalize weights
-            weights = analysis_data.get("document_weights", {})
-            weights = self._normalize_weights(weights)
-
-            return QueryAnalysis(
-                intent_type=analysis_data.get("intent_type", "general"),
-                intent_parameters=analysis_data.get("intent_parameters", {}),
-                document_weights=weights,
-                is_multi_query=analysis_data.get("is_multi_query", False),
-                expanded_queries=analysis_data.get("expanded_queries", []),
-                confidence=float(analysis_data.get("confidence", 0.0)),
-                reasoning=analysis_data.get("reasoning", "LLM analysis completed"),
-            )
-
-        except (json.JSONDecodeError, KeyError, ValueError) as e:
-            logger.error(f"Failed to parse LLM query analysis: {e}")
-            logger.debug(f"Raw LLM response: {response.content}")
-            return self._fallback_analysis(query)
 
     def _fallback_analysis(self, query: str) -> QueryAnalysis:
         """
@@ -361,6 +341,20 @@ Document weights must sum to 1.0. Higher candidate weight for personal questions
                 normalized[key] = 1.0 / len(required_keys)
 
         return normalized
+
+    # --- Embedding helpers ---
+    def _embed(self, texts: List[str]):
+        assert self.embedder is not None
+        # sentence-transformers returns List[List[float]]; convert to numpy array for ops
+        vectors = self.embedder.encode(texts, normalize_embeddings=True)
+        if np is not None:
+            return np.array(vectors, dtype=float)
+        return vectors
+
+    def _cosine_sim(self, a, b):
+        assert np is not None
+        # a: (n, d), b: (m, d) with unit-normalized rows
+        return np.matmul(a, b.T)
 
     def get_expanded_queries(self, original_query: str) -> List[str]:
         """

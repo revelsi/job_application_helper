@@ -81,6 +81,8 @@ dependencies = [
     # Data Science & ML (Basic)
     "numpy>=1.23.0,<3.0.0",
     "pandas>=2.3.0,<3.0.0",
+    # Embeddings & Semantic Routing
+    "sentence-transformers>=2.2.2,<3.0.0",
 ]
 
 [project.optional-dependencies]
