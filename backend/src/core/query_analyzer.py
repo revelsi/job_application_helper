@@ -166,7 +166,7 @@ Document weights must sum to 1.0. Higher candidate weight for personal questions
         if hasattr(self.llm_provider, "provider_type"):
             provider_type_str = self.llm_provider.provider_type.value if hasattr(self.llm_provider.provider_type, 'value') else str(self.llm_provider.provider_type)
             if provider_type_str == "openai":
-                small_model = "gpt-5-nano"  # OpenAI's fast, cheap reasoning model
+                small_model = "gpt-5-nano"  # Faster, cheaper reasoning model for analysis
             elif provider_type_str == "mistral":
                 small_model = "mistral-small-latest"  # Mistral's lightweight model for classification
             elif provider_type_str == "ollama":
@@ -183,6 +183,7 @@ Document weights must sum to 1.0. Higher candidate weight for personal questions
             content_type=ContentType.GENERAL_RESPONSE,
             context={"task": "query_analysis"},
             max_tokens=500,
+            reasoning_effort="minimal",
             # Remove temperature parameter for GPT-5-mini compatibility
             # temperature=0.2,  # Low temperature for consistent analysis
             model=small_model,  # Use provider-appropriate small/fast model

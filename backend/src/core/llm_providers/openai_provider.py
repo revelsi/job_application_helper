@@ -161,41 +161,49 @@ class OpenAIProvider(LLMProvider):
             
             self.logger.debug(f"OpenAI API call: {model} with {safe_max_tokens} max tokens, reasoning_effort: {reasoning_effort}")
             
-            # Build API call parameters
-            api_params = {
-                "model": model,
-                "messages": messages,
-            }
-            
-            # Only add temperature for models that support it (not GPT-5 models)
-            if self._supports_temperature(model):
-                api_params["temperature"] = temperature
-                self.logger.debug(f"Using temperature: {temperature} for model: {model}")
-            else:
-                self.logger.debug(f"Skipping temperature parameter for model: {model} (not supported)")
-            
-            # Use max_completion_tokens for GPT-5 family, max_tokens for other models
+            # For GPT-5 family, use the Responses API; otherwise use Chat Completions
             if isinstance(model, str) and model.startswith("gpt-5"):
-                api_params["max_completion_tokens"] = safe_max_tokens
+                # Flatten messages to a single input string to ensure compatibility
+                input_segments: List[str] = []
+                for m in messages:
+                    role = m.get("role", "user")
+                    content = m.get("content", "")
+                    input_segments.append(f"{role.title()}: {content}")
+                input_text = "\n".join(input_segments)
+
+                api_params = {
+                    "model": model,
+                    "input": input_text,
+                    "max_output_tokens": safe_max_tokens,
+                }
+
+                # Reasoning effort mapping for Responses API
+                if reasoning_effort and self._supports_reasoning_effort(model):
+                    api_params["reasoning"] = {"effort": reasoning_effort}
+                    self.logger.debug(f"Using reasoning.effort: {reasoning_effort} for model: {model}")
+
+                # Verbosity is not officially part of Responses API; avoid sending unknown params
+                response = self.client.responses.create(**api_params)
+                return response
             else:
+                # Build API call parameters for Chat Completions
+                api_params = {
+                    "model": model,
+                    "messages": messages,
+                }
+
+                # Only add temperature for models that support it (not GPT-5 models)
+                if self._supports_temperature(model):
+                    api_params["temperature"] = temperature
+                    self.logger.debug(f"Using temperature: {temperature} for model: {model}")
+                else:
+                    self.logger.debug(f"Skipping temperature parameter for model: {model} (not supported)")
+
+                # Use max_tokens for non-GPT-5 models
                 api_params["max_tokens"] = safe_max_tokens
-            
-            # Add reasoning_effort for reasoning models like GPT-5-mini
-            if reasoning_effort and self._supports_reasoning_effort(model):
-                api_params["reasoning_effort"] = reasoning_effort
-                self.logger.debug(f"Using reasoning_effort: {reasoning_effort} for model: {model}")
-            elif reasoning_effort:
-                self.logger.debug(f"Ignoring reasoning_effort '{reasoning_effort}' - not supported by model: {model}")
-            
-            # Add verbosity for models that support it (GPT-5 models)
-            if verbosity and self._supports_verbosity(model):
-                api_params["verbosity"] = verbosity
-                self.logger.debug(f"Using verbosity: {verbosity} for model: {model}")
-            elif verbosity:
-                self.logger.debug(f"Ignoring verbosity '{verbosity}' - not supported by model: {model}")
-            
-            response = self.client.chat.completions.create(**api_params)
-            return response
+
+                response = self.client.chat.completions.create(**api_params)
+                return response
         except Exception as e:
             self.logger.error(f"OpenAI API call failed: {e}")
             raise
@@ -203,11 +211,77 @@ class OpenAIProvider(LLMProvider):
     def _parse_response(
         self, response: Dict[str, Any]
     ) -> tuple[str, int, Optional[str]]:
-        """Parse OpenAI response into (content, tokens_used, request_id)."""
-        content = response.choices[0].message.content
-        tokens_used = response.usage.total_tokens if response.usage else 0
+        """Parse OpenAI response into (content, tokens_used, request_id).
+
+        Handles GPT-5 family responses where message.content can be a list of parts.
+        """
+        extracted_text = ""
+
+        # First, try Responses API convenience field
+        output_text = getattr(response, "output_text", None)
+        if isinstance(output_text, str) and output_text:
+            extracted_text = output_text
+        else:
+            # Try Chat Completions format
+            choice = response.choices[0] if getattr(response, "choices", None) else None
+            message = getattr(choice, "message", None) if choice else None
+
+            if message is not None:
+                # Standard string content
+                if isinstance(getattr(message, "content", None), str):
+                    extracted_text = message.content or ""
+                else:
+                    # Newer models may return an array of content parts
+                    parts = getattr(message, "content", None)
+                    if isinstance(parts, list):
+                        collected: list[str] = []
+                        for part in parts:
+                            # part can be a pydantic-like object or dict
+                            part_type = getattr(part, "type", None) or (
+                                part.get("type") if isinstance(part, dict) else None
+                            )
+                            # Prefer explicit text fields
+                            if part_type in {"output_text", "text"}:
+                                text_val = getattr(part, "text", None) or (
+                                    part.get("text") if isinstance(part, dict) else None
+                                )
+                                if isinstance(text_val, str):
+                                    collected.append(text_val)
+                            # Fallback: if the part itself is a string
+                            elif isinstance(part, str):
+                                collected.append(part)
+                        extracted_text = "".join(collected)
+
+                # As a final fallback, some models may include refusal/reasoning fields
+                if not extracted_text:
+                    refusal = getattr(message, "refusal", None)
+                    if isinstance(refusal, str) and refusal:
+                        extracted_text = refusal
+
+                    reasoning = getattr(message, "reasoning", None)
+                    if not extracted_text and isinstance(reasoning, str) and reasoning:
+                        extracted_text = reasoning
+
+        tokens_used = 0
+        usage = getattr(response, "usage", None)
+        if usage is not None:
+            # Try total_tokens first, otherwise sum input/output tokens if available
+            total_tokens = getattr(usage, "total_tokens", None)
+            if isinstance(total_tokens, int):
+                tokens_used = total_tokens
+            else:
+                input_tokens = getattr(usage, "prompt_tokens", None) or getattr(
+                    usage, "input_tokens", None
+                )
+                output_tokens = getattr(usage, "completion_tokens", None) or getattr(
+                    usage, "output_tokens", None
+                )
+                if isinstance(input_tokens, int) and isinstance(output_tokens, int):
+                    tokens_used = input_tokens + output_tokens
+
         request_id = getattr(response, "id", None)
-        return content, tokens_used, request_id
+
+        return extracted_text or "", tokens_used, request_id
 
     async def generate_content_stream(
         self, request: GenerationRequest, timeout: float = 30.0
@@ -240,47 +314,50 @@ class OpenAIProvider(LLMProvider):
 
             self.logger.info(f"Starting streaming generation with model: {model} (max_tokens: {max_tokens})")
 
-            # Build API call parameters for streaming
-            stream_params = {
-                "model": model,
-                "messages": messages,
-                "stream": True,
-            }
-            
-            # Only add temperature for models that support it (not GPT-5 models)
-            if self._supports_temperature(model):
-                stream_params["temperature"] = request.temperature
-                self.logger.debug(f"Using temperature: {request.temperature} for streaming with model: {model}")
-            else:
-                self.logger.debug(f"Skipping temperature parameter for streaming with model: {model} (not supported)")
-            
-            # Use max_completion_tokens for GPT-5 family, max_tokens for other models
+            # Streaming implementation varies by model family
             if isinstance(model, str) and model.startswith("gpt-5"):
-                stream_params["max_completion_tokens"] = max_tokens
-            else:
-                stream_params["max_tokens"] = max_tokens
-            
-            # Add reasoning_effort for reasoning models like GPT-5-mini
-            if request.reasoning_effort and self._supports_reasoning_effort(model):
-                stream_params["reasoning_effort"] = request.reasoning_effort
-                self.logger.debug(f"Using reasoning_effort: {request.reasoning_effort} for streaming with model: {model}")
-            elif request.reasoning_effort:
-                self.logger.debug(f"Ignoring reasoning_effort '{request.reasoning_effort}' - not supported by model: {model}")
-            
-            # Add verbosity for models that support it (GPT-5 models)
-            if request.verbosity and self._supports_verbosity(model):
-                stream_params["verbosity"] = request.verbosity
-                self.logger.debug(f"Using verbosity: {request.verbosity} for streaming with model: {model}")
-            elif request.verbosity:
-                self.logger.debug(f"Ignoring verbosity '{request.verbosity}' - not supported by model: {model}")
-            
-            # Make streaming API call
-            stream = self.client.chat.completions.create(**stream_params)
+                # Responses API streaming
+                input_segments: List[str] = []
+                for m in messages:
+                    role = m.get("role", "user")
+                    content = m.get("content", "")
+                    input_segments.append(f"{role.title()}: {content}")
+                input_text = "\n".join(input_segments)
 
-            # Yield content chunks
-            for chunk in stream:
-                if chunk.choices[0].delta.content is not None:
-                    yield chunk.choices[0].delta.content
+                reasoning_param = None
+                if request.reasoning_effort and self._supports_reasoning_effort(model):
+                    reasoning_param = {"effort": request.reasoning_effort}
+
+                with self.client.responses.stream(
+                    model=model,
+                    input=input_text,
+                    max_output_tokens=max_tokens,
+                    **({"reasoning": reasoning_param} if reasoning_param else {}),
+                ) as stream:
+                    for event in stream:
+                        # Emit only output text deltas
+                        if getattr(event, "type", "") == "response.output_text.delta":
+                            delta = getattr(event, "delta", None)
+                            if isinstance(delta, str) and delta:
+                                yield delta
+                    stream.close()
+            else:
+                # Chat Completions streaming
+                stream_params = {
+                    "model": model,
+                    "messages": messages,
+                    "stream": True,
+                    "max_tokens": max_tokens,
+                }
+                if self._supports_temperature(model):
+                    stream_params["temperature"] = request.temperature
+
+                stream = self.client.chat.completions.create(**stream_params)
+
+                # Yield content chunks
+                for chunk in stream:
+                    if chunk.choices[0].delta.content is not None:
+                        yield chunk.choices[0].delta.content
 
         except Exception as e:
             self.logger.error(f"Streaming generation failed: {e}")
